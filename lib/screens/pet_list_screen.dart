@@ -2,16 +2,53 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:tailmate/providers/pet_provider.dart';
 import 'package:tailmate/screens/pet_form_screen.dart';
+import 'package:tailmate/screens/pet_detail_screen.dart';
 import 'package:tailmate/theme/app_theme.dart';
 
-class PetListScreen extends StatelessWidget {
+class PetListScreen extends StatefulWidget {
   const PetListScreen({super.key});
+
+  @override
+  State<PetListScreen> createState() => _PetListScreenState();
+}
+
+class _PetListScreenState extends State<PetListScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _loadPets();
+  }
+
+  Future<void> _loadPets() async {
+    try {
+      await Provider.of<PetProvider>(context, listen: false).loadPets();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading pets: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My Pets'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.add),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const PetFormScreen(),
+                ),
+              );
+            },
+          ),
+        ],
       ),
       body: Consumer<PetProvider>(
         builder: (context, petProvider, child) {
@@ -56,98 +93,34 @@ class PetListScreen extends StatelessWidget {
               final pet = pets[index];
               return Card(
                 margin: const EdgeInsets.only(bottom: 16),
-                child: InkWell(
+                child: ListTile(
+                  leading: CircleAvatar(
+                    backgroundImage: pet.imageUrl != null
+                        ? NetworkImage(pet.imageUrl!)
+                        : null,
+                    child: pet.imageUrl == null
+                        ? const Icon(Icons.pets)
+                        : null,
+                  ),
+                  title: Text(
+                    pet.name,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  subtitle: Text('${pet.species} • ${pet.breed}'),
+                  trailing: const Icon(Icons.chevron_right),
                   onTap: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => PetFormScreen(pet: pet),
+                        builder: (context) => PetDetailScreen(pet: pet),
                       ),
                     );
                   },
-                  child: Padding(
-                    padding: const EdgeInsets.all(12.0),
-                    child: Row(
-                      children: [
-                        Hero(
-                          tag: 'pet_image_${pet.id}',
-                          child: CircleAvatar(
-                            radius: 30,
-                            backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-                            backgroundImage: pet.imageUrl != null
-                                ? NetworkImage(pet.imageUrl!)
-                                : null,
-                            child: pet.imageUrl == null
-                                ? Text(
-                                    pet.name[0].toUpperCase(),
-                                    style: TextStyle(
-                                      color: AppTheme.primaryColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 24,
-                                    ),
-                                  )
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                pet.name,
-                                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${pet.species} • ${pet.breed}',
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                  color: AppTheme.greyColor,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                '${pet.gender} • ${pet.weight} kg',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.greyColor,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.edit),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => PetFormScreen(pet: pet),
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
                 ),
               );
             },
           );
         },
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const PetFormScreen(),
-            ),
-          );
-        },
-        icon: const Icon(Icons.add),
-        label: const Text('Add Pet'),
       ),
     );
   }

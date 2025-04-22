@@ -6,7 +6,7 @@ import 'package:tailmate/providers/service_provider.dart';
 import 'package:tailmate/screens/service_details_screen.dart';
 import 'package:tailmate/theme/app_theme.dart';
 
-class ServiceProvidersScreen extends StatelessWidget {
+class ServiceProvidersScreen extends StatefulWidget {
   final Service service;
 
   const ServiceProvidersScreen({
@@ -15,14 +15,49 @@ class ServiceProvidersScreen extends StatelessWidget {
   }) : super(key: key);
 
   @override
+  State<ServiceProvidersScreen> createState() => _ServiceProvidersScreenState();
+}
+
+class _ServiceProvidersScreenState extends State<ServiceProvidersScreen> {
+  @override
+  void initState() {
+    super.initState();
+    print('Initializing ServiceProvidersScreen for service: ${widget.service.title}');
+    _loadProviders();
+  }
+
+  Future<void> _loadProviders() async {
+    try {
+      print('Loading providers for service: ${widget.service.title}');
+      await context.read<ServiceProvider>().loadServiceProviders();
+      final providers = context.read<ServiceProvider>().getProvidersForService(widget.service.id);
+      print('Found ${providers.length} providers for service ${widget.service.title}');
+      if (providers.isEmpty) {
+        print('No providers found for service ${widget.service.title}');
+      } else {
+        print('Provider details:');
+        for (var provider in providers) {
+          print('- ${provider.name} (ID: ${provider.id})');
+          print('  Service IDs: ${provider.serviceIds}');
+          print('  Specialties: ${provider.specialties}');
+        }
+      }
+    } catch (e) {
+      print('Error loading providers: $e');
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('${service.title} Providers'),
+        title: Text('${widget.service.title} Providers'),
       ),
       body: Consumer<ServiceProvider>(
         builder: (context, serviceProvider, child) {
-          final providers = serviceProvider.getProvidersForService(service.id);
+          print('Building providers list for service: ${widget.service.id}');
+          final providers = serviceProvider.getProvidersForService(widget.service.id);
+          print('Retrieved ${providers.length} providers for display');
 
           if (providers.isEmpty) {
             return Center(
@@ -58,7 +93,7 @@ class ServiceProvidersScreen extends StatelessWidget {
               final provider = providers[index];
               return _ProviderCard(
                 provider: provider,
-                service: service,
+                service: widget.service,
               );
             },
           );
@@ -102,32 +137,50 @@ class _ProviderCard extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  CircleAvatar(
-                    radius: 24,
-                    backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
-                    child: Text(
-                      provider.name[0],
-                      style: TextStyle(
-                        color: AppTheme.primaryColor,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 20,
+                  if (provider.profileImage != null)
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundImage: NetworkImage(provider.profileImage!),
+                    )
+                  else
+                    CircleAvatar(
+                      radius: 24,
+                      backgroundColor: AppTheme.primaryColor.withOpacity(0.1),
+                      child: Text(
+                        provider.name[0],
+                        style: TextStyle(
+                          color: AppTheme.primaryColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
                       ),
                     ),
-                  ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          provider.name,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
+                        Row(
+                          children: [
+                            Text(
+                              provider.name,
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                            ),
+                            if (provider.isVerified)
+                              const SizedBox(width: 4),
+                            if (provider.isVerified)
+                              Icon(
+                                Icons.verified,
+                                size: 16,
+                                color: AppTheme.primaryColor,
                               ),
+                          ],
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          provider.location,
+                          provider.address,
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: AppTheme.greyColor,
                               ),
@@ -142,7 +195,6 @@ class _ProviderCard extends StatelessWidget {
                         children: [
                           IconButton(
                             onPressed: () {
-                              // TODO: Implement chat navigation
                               Navigator.pushNamed(
                                 context,
                                 '/chat',
@@ -174,7 +226,7 @@ class _ProviderCard extends StatelessWidget {
                         ],
                       ),
                       Text(
-                        '(${provider.reviewCount})',
+                        '(${provider.totalRatings})',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: AppTheme.greyColor,
                             ),

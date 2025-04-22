@@ -2,142 +2,157 @@ import 'package:flutter/foundation.dart';
 import 'package:tailmate/models/booking.dart';
 import 'package:tailmate/models/service.dart';
 import 'package:tailmate/models/service_provider_model.dart';
+import 'package:tailmate/services/supabase_service.dart';
 import 'package:uuid/uuid.dart';
 
 class ServiceProvider with ChangeNotifier {
-  final List<Service> _services = [
-    Service(
-      id: '1',
-      title: 'Pet Walking',
-      description: 'Professional dog walking service. We ensure your pet gets the exercise they need.',
-      price: 25.0,
-      imageUrl: '',
-      category: 'Walking',
-      duration: const Duration(minutes: 30),
-    ),
-    Service(
-      id: '2',
-      title: 'Pet Sitting',
-      description: 'In-home pet sitting service. We take care of your pet while you\'re away.',
-      price: 45.0,
-      imageUrl: '',
-      category: 'Sitting',
-      duration: const Duration(hours: 4),
-    ),
-    Service(
-      id: '3',
-      title: 'Grooming',
-      description: 'Professional grooming service including bath, haircut, and nail trimming.',
-      price: 55.0,
-      imageUrl: '',
-      category: 'Grooming',
-      duration: const Duration(hours: 2),
-    ),
-    Service(
-      id: '4',
-      title: 'Vet Visit',
-      description: 'Regular check-up and vaccination service with our partner veterinarians.',
-      price: 75.0,
-      imageUrl: '',
-      category: 'Healthcare',
-      duration: const Duration(hours: 1),
-    ),
-  ];
-
-  final List<ServiceProviderModel> _serviceProviders = [
-    ServiceProviderModel(
-      id: '1',
-      name: 'Happy Paws Services',
-      description: 'Professional pet care services with over 5 years of experience.',
-      rating: 4.8,
-      reviewCount: 156,
-      serviceIds: ['1', '2'],
-      imageUrl: '',
-      location: 'Downtown',
-      priceMultiplier: 1.0,
-      specialties: ['Dogs', 'Cats'],
-    ),
-    ServiceProviderModel(
-      id: '2',
-      name: 'Pawsome Groomers',
-      description: 'Expert grooming services for all breeds. Certified professional groomers.',
-      rating: 4.9,
-      reviewCount: 203,
-      serviceIds: ['3'],
-      imageUrl: '',
-      location: 'Westside',
-      priceMultiplier: 1.2,
-      specialties: ['All Breeds', 'Show Grooming'],
-    ),
-    ServiceProviderModel(
-      id: '3',
-      name: 'Dr. Smith\'s Veterinary Clinic',
-      description: 'Full-service veterinary clinic with emergency care available.',
-      rating: 4.7,
-      reviewCount: 312,
-      serviceIds: ['4'],
-      imageUrl: '',
-      location: 'Eastside',
-      priceMultiplier: 1.1,
-      specialties: ['Emergency Care', 'Surgery', 'Dental'],
-    ),
-    ServiceProviderModel(
-      id: '4',
-      name: 'Elite Pet Care',
-      description: 'Premium pet sitting and walking services. Insured and bonded.',
-      rating: 4.6,
-      reviewCount: 89,
-      serviceIds: ['1', '2'],
-      imageUrl: '',
-      location: 'Northside',
-      priceMultiplier: 1.3,
-      specialties: ['Luxury Care', 'Overnight Stays'],
-    ),
-    ServiceProviderModel(
-      id: '5',
-      name: 'Gentle Touch Grooming',
-      description: 'Specialized in handling anxious and senior pets. Calm environment.',
-      rating: 4.9,
-      reviewCount: 167,
-      serviceIds: ['3'],
-      imageUrl: '',
-      location: 'Southside',
-      priceMultiplier: 1.1,
-      specialties: ['Senior Pets', 'Anxious Pets'],
-    ),
-  ];
-
+  final List<Service> _services = [];
+  final List<ServiceProviderModel> _serviceProviders = [];
   final List<Booking> _bookings = [];
+  final SupabaseService _supabaseService = SupabaseService();
 
   List<Service> get services => List.unmodifiable(_services);
   List<ServiceProviderModel> get serviceProviders => List.unmodifiable(_serviceProviders);
   List<Booking> get bookings => List.unmodifiable(_bookings);
 
+  Future<void> loadServices() async {
+    try {
+      print('Loading services from Supabase...');
+      final services = await _supabaseService.getServices();
+      print('Raw services data received: $services');
+      
+      _services.clear();
+      if (services.isNotEmpty) {
+        for (var service in services) {
+          try {
+            print('Converting service: ${service['name']}');
+            print('Service data: $service');
+            final model = Service.fromMap(service);
+            print('Converted service model: ${model.title} (ID: ${model.id})');
+            _services.add(model);
+          } catch (e) {
+            print('Error converting service: $e');
+          }
+        }
+      }
+      print('Total services loaded: ${_services.length}');
+      notifyListeners();
+    } catch (e) {
+      print('Error loading services: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> loadServiceProviders() async {
+    try {
+      print('Loading service providers...');
+      _serviceProviders.clear();
+      
+      final providers = await _supabaseService.getServiceProviders();
+      print('Raw providers data received: $providers');
+      
+      for (var provider in providers) {
+        try {
+          print('Converting provider: ${provider['name']}');
+          print('Provider data: $provider');
+          print('Service IDs: ${provider['service_ids']}');
+          print('Specialties: ${provider['specialties']}');
+          
+          final model = ServiceProviderModel.fromMap(provider);
+          print('Converted model: ${model.name} (ID: ${model.id})');
+          print('Model Service IDs: ${model.serviceIds}');
+          print('Model Specialties: ${model.specialties}');
+          _serviceProviders.add(model);
+        } catch (e) {
+          print('Error converting provider ${provider['name']}: $e');
+        }
+      }
+      
+      print('Total providers loaded: ${_serviceProviders.length}');
+      notifyListeners();
+    } catch (e) {
+      print('Error loading service providers: $e');
+      throw Exception('Failed to load service providers');
+    }
+  }
+
+  Future<void> loadBookings() async {
+    try {
+      final bookings = await _supabaseService.getUserBookings();
+      _bookings.clear();
+      _bookings.addAll(bookings.map((data) => Booking.fromMap(data)));
+      notifyListeners();
+    } catch (e) {
+      print('Error loading bookings: $e');
+      rethrow;
+    }
+  }
+
   List<ServiceProviderModel> getProvidersForService(String serviceId) {
-    return _serviceProviders
-        .where((provider) => provider.serviceIds.contains(serviceId))
+    print('Getting providers for service ID: $serviceId');
+    print('Total providers available: ${_serviceProviders.length}');
+    
+    final providers = _serviceProviders
+        .where((provider) {
+          print('Checking provider: ${provider.name}');
+          print('Provider service IDs: ${provider.serviceIds}');
+          final contains = provider.serviceIds.contains(serviceId);
+          print('Contains service ID $serviceId: $contains');
+          return contains;
+        })
         .toList();
+        
+    print('Found ${providers.length} providers for service $serviceId');
+    return providers;
   }
 
   List<Booking> getBookingsByStatus(BookingStatus status) {
     return _bookings.where((booking) => booking.status == status).toList();
   }
 
-  void addBooking(Booking booking) {
-    _bookings.add(booking);
-    notifyListeners();
-  }
+  Future<void> addBooking({
+    required String providerId,
+    required String serviceId,
+    required String petId,
+    required DateTime dateTime,
+    required double amount,
+    String? notes,
+  }) async {
+    try {
+      final booking = await _supabaseService.createBooking(
+        providerId: providerId,
+        serviceId: serviceId,
+        petId: petId,
+        bookingDate: dateTime.toIso8601String().split('T')[0],
+        bookingTime: dateTime.toIso8601String().split('T')[1].substring(0, 5),
+        amount: amount,
+        notes: notes,
+      );
 
-  void updateBookingStatus(String bookingId, BookingStatus newStatus) {
-    final index = _bookings.indexWhere((booking) => booking.id == bookingId);
-    if (index >= 0) {
-      _bookings[index] = _bookings[index].copyWith(status: newStatus);
+      _bookings.add(Booking.fromMap(booking));
       notifyListeners();
+    } catch (e) {
+      print('Error creating booking: $e');
+      rethrow;
     }
   }
 
-  void cancelBooking(String bookingId) {
-    updateBookingStatus(bookingId, BookingStatus.cancelled);
+  Future<void> updateBookingStatus(String bookingId, BookingStatus newStatus) async {
+    try {
+      await _supabaseService.updateBookingStatus(bookingId, newStatus);
+      final index = _bookings.indexWhere((booking) => booking.id == bookingId);
+      if (index >= 0) {
+        _bookings[index] = _bookings[index].copyWith(status: newStatus);
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error updating booking status: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> cancelBooking(String bookingId) async {
+    await updateBookingStatus(bookingId, BookingStatus.cancelled);
   }
 
   Service getServiceById(String id) {
@@ -149,6 +164,6 @@ class ServiceProvider with ChangeNotifier {
   }
 
   List<Booking> getBookingsForPet(String petId) {
-    return _bookings.where((booking) => booking.pet.id == petId).toList();
+    return _bookings.where((booking) => booking.petId == petId).toList();
   }
 } 

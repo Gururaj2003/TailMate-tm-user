@@ -1,4 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:tailmate/models/booking.dart';
 
 class SupabaseService {
   final SupabaseClient _supabase = Supabase.instance.client;
@@ -266,8 +267,13 @@ class SupabaseService {
   // Get all pets for current user
   Future<List<Map<String, dynamic>>> getPets() async {
     try {
+      print('Starting to fetch pets');
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) throw Exception('No user logged in');
+      if (userId == null) {
+        print('Error: No user logged in');
+        throw Exception('No user logged in');
+      }
+      print('Current user ID: $userId');
 
       final response = await _supabase
           .from('pets')
@@ -276,9 +282,17 @@ class SupabaseService {
           .order('created_at', ascending: false);
 
       print('Retrieved ${response.length} pets');
+      for (var pet in response) {
+        print('Pet: ${pet['name']} (ID: ${pet['id']})');
+      }
       return List<Map<String, dynamic>>.from(response);
     } catch (e) {
       print('Error getting pets: $e');
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+      }
       throw Exception('An error occurred while retrieving your pets. Please try again.');
     }
   }
@@ -319,15 +333,12 @@ class SupabaseService {
   // Add a new pet
   Future<Map<String, dynamic>> addPet({
     required String name,
-    required String type,
+    required String species,
     String? breed,
-    int? age,
+    DateTime? birthDate,
     double? weight,
     String? gender,
-    String? color,
-    String? medicalHistory,
-    String? specialInstructions,
-    String? profileImage,
+    String? imageUrl,
   }) async {
     try {
       print('Starting to add new pet: $name');
@@ -368,15 +379,12 @@ class SupabaseService {
       final pet = {
         'owner_id': userId,
         'name': name,
-        'type': type,
+        'species': species,
         'breed': breed,
-        'age': age,
+        'birth_date': birthDate?.toIso8601String(),
         'weight': weight,
         'gender': gender,
-        'color': color,
-        'medical_history': medicalHistory,
-        'special_instructions': specialInstructions,
-        'profile_image': profileImage,
+        'image_url': imageUrl,
         'created_at': DateTime.now().toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       };
@@ -384,8 +392,8 @@ class SupabaseService {
       print('Pet data to insert: $pet');
 
       // First insert without select to verify the insert works
-      await _supabase.from('pets').insert(pet);
-      print('Pet inserted successfully');
+      final insertResponse = await _supabase.from('pets').insert(pet);
+      print('Insert response: $insertResponse');
 
       // Then fetch the inserted pet
       final response = await _supabase
@@ -412,15 +420,12 @@ class SupabaseService {
   Future<Map<String, dynamic>> updatePet({
     required String petId,
     String? name,
-    String? type,
+    String? species,
     String? breed,
-    int? age,
+    DateTime? birthDate,
     double? weight,
     String? gender,
-    String? color,
-    String? medicalHistory,
-    String? specialInstructions,
-    String? profileImage,
+    String? imageUrl,
   }) async {
     try {
       print('Starting pet update for ID: $petId');
@@ -433,15 +438,12 @@ class SupabaseService {
 
       final updates = {
         if (name != null) 'name': name,
-        if (type != null) 'type': type,
+        if (species != null) 'species': species,
         if (breed != null) 'breed': breed,
-        if (age != null) 'age': age,
+        if (birthDate != null) 'birth_date': birthDate.toIso8601String(),
         if (weight != null) 'weight': weight,
         if (gender != null) 'gender': gender,
-        if (color != null) 'color': color,
-        if (medicalHistory != null) 'medical_history': medicalHistory,
-        if (specialInstructions != null) 'special_instructions': specialInstructions,
-        if (profileImage != null) 'profile_image': profileImage,
+        if (imageUrl != null) 'image_url': imageUrl,
       };
 
       print('Update data: $updates');
@@ -494,6 +496,201 @@ class SupabaseService {
     } catch (e) {
       print('Error deleting pet: $e');
       throw Exception('An error occurred while deleting your pet. Please try again.');
+    }
+  }
+
+  // Service Provider Operations
+  Future<List<Map<String, dynamic>>> getServiceProviders() async {
+    print('Fetching service providers from Supabase...');
+    try {
+      final response = await _supabase
+          .from('service_providers')
+          .select('*')
+          .order('name');
+      print('Successfully fetched ${response.length} service providers');
+      print('First provider data: ${response.isNotEmpty ? response.first : 'No providers found'}');
+      return response;
+    } catch (e) {
+      print('Error fetching service providers: $e');
+      rethrow;
+    }
+  }
+
+  Future<Map<String, dynamic>> getServiceProvider(String providerId) async {
+    try {
+      final response = await _supabase
+          .from('service_providers')
+          .select()
+          .eq('id', providerId)
+          .single();
+      return response;
+    } catch (e) {
+      print('Error getting service provider: $e');
+      throw Exception('Failed to fetch service provider details');
+    }
+  }
+
+  // Services Operations
+  Future<List<Map<String, dynamic>>> getServices() async {
+    print('Fetching services from Supabase...');
+    try {
+      final response = await _supabase
+          .from('services')
+          .select('*')
+          .order('name');
+      print('Successfully fetched ${response.length} services');
+      print('First service data: ${response.isNotEmpty ? response.first : 'No services found'}');
+      return response;
+    } catch (e) {
+      print('Error fetching services: $e');
+      rethrow;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getServicesByProvider(String providerId) async {
+    try {
+      final response = await _supabase
+          .from('services')
+          .select()
+          .eq('provider_id', providerId)
+          .order('name');
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error getting services: $e');
+      throw Exception('Failed to fetch services');
+    }
+  }
+
+  // Booking Operations
+  Future<Map<String, dynamic>> createBooking({
+    required String providerId,
+    required String serviceId,
+    required String petId,
+    required String bookingDate,
+    required String bookingTime,
+    required double amount,
+    String? notes,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No user logged in');
+
+      final booking = {
+        'user_id': userId,
+        'provider_id': providerId,
+        'service_id': serviceId,
+        'pet_id': petId,
+        'booking_date': bookingDate,
+        'booking_time': bookingTime,
+        'status': 'pending',
+        'payment_status': 'pending',
+        'amount': amount,
+        'notes': notes,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      final response = await _supabase
+          .from('bookings')
+          .insert(booking)
+          .select()
+          .single();
+
+      return response;
+    } catch (e) {
+      print('Error creating booking: $e');
+      throw Exception('Failed to create booking');
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getUserBookings() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No user logged in');
+
+      final response = await _supabase
+          .from('bookings')
+          .select('*, services(*), service_providers(*)')
+          .eq('user_id', userId)
+          .order('created_at', ascending: false);
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error getting bookings: $e');
+      throw Exception('Failed to fetch bookings');
+    }
+  }
+
+  Future<void> updateBookingStatus(String bookingId, BookingStatus status) async {
+    try {
+      await _supabase
+          .from('bookings')
+          .update({
+            'status': status.toString().split('.').last,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', bookingId);
+    } catch (e) {
+      print('Error updating booking status: $e');
+      throw Exception('Failed to update booking status');
+    }
+  }
+
+  // Chat Operations
+  Future<List<Map<String, dynamic>>> getChatHistory(String providerId) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No user logged in');
+
+      final response = await _supabase
+          .from('chat_history')
+          .select()
+          .or('sender_id.eq.${userId},receiver_id.eq.${userId}')
+          .eq('receiver_id', providerId)
+          .order('created_at');
+
+      return List<Map<String, dynamic>>.from(response);
+    } catch (e) {
+      print('Error getting chat history: $e');
+      throw Exception('Failed to fetch chat history');
+    }
+  }
+
+  Future<void> sendMessage({
+    required String receiverId,
+    required String message,
+  }) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No user logged in');
+
+      await _supabase.from('chat_history').insert({
+        'sender_id': userId,
+        'receiver_id': receiverId,
+        'message': message,
+        'is_read': false,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('Error sending message: $e');
+      throw Exception('Failed to send message');
+    }
+  }
+
+  Future<void> markMessagesAsRead(String providerId) async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) throw Exception('No user logged in');
+
+      await _supabase
+          .from('chat_history')
+          .update({'is_read': true})
+          .eq('receiver_id', userId)
+          .eq('sender_id', providerId)
+          .eq('is_read', false);
+    } catch (e) {
+      print('Error marking messages as read: $e');
+      throw Exception('Failed to mark messages as read');
     }
   }
 } 

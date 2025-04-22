@@ -3,7 +3,7 @@ class Service {
   final String title;
   final String description;
   final double price;
-  final String imageUrl;
+  final String? imageUrl;
   final String category;
   final Duration duration;
 
@@ -12,7 +12,7 @@ class Service {
     required this.title,
     required this.description,
     required this.price,
-    required this.imageUrl,
+    this.imageUrl,
     required this.category,
     required this.duration,
   });
@@ -20,24 +20,33 @@ class Service {
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'title': title,
+      'name': title,
       'description': description,
       'price': price,
-      'imageUrl': imageUrl,
+      'image_url': imageUrl,
       'category': category,
       'duration': duration.inMinutes,
     };
   }
 
   factory Service.fromMap(Map<String, dynamic> map) {
-    return Service(
-      id: map['id'],
-      title: map['title'],
-      description: map['description'],
-      price: map['price'],
-      imageUrl: map['imageUrl'],
-      category: map['category'],
-      duration: Duration(minutes: map['duration']),
-    );
+    print('Creating Service from map: $map');
+    try {
+      final service = Service(
+        id: map['id'] as String,
+        title: map['name'] as String,
+        description: map['description'] as String,
+        price: (map['price'] as num).toDouble(),
+        imageUrl: map['image_url'] as String?,
+        category: map['category'] as String,
+        duration: Duration(minutes: (map['duration'] as num).toInt()),
+      );
+      print('Created service: ${service.title} (ID: ${service.id})');
+      return service;
+    } catch (e) {
+      print('Error creating Service: $e');
+      print('Map data: $map');
+      rethrow;
+    }
   }
 } 

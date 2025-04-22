@@ -5,8 +5,31 @@ import 'package:tailmate/providers/service_provider.dart';
 import 'package:tailmate/theme/app_theme.dart';
 import 'package:intl/intl.dart';
 
-class ServicesTab extends StatelessWidget {
+class ServicesTab extends StatefulWidget {
   const ServicesTab({Key? key}) : super(key: key);
+
+  @override
+  State<ServicesTab> createState() => _ServicesTabState();
+}
+
+class _ServicesTabState extends State<ServicesTab> {
+  @override
+  void initState() {
+    super.initState();
+    _loadBookings();
+  }
+
+  Future<void> _loadBookings() async {
+    try {
+      await Provider.of<ServiceProvider>(context, listen: false).loadBookings();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading bookings: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -92,13 +115,13 @@ class _BookingList extends StatelessWidget {
                     Row(
                       children: [
                         Icon(
-                          _getServiceIcon(booking.service.category),
+                          _getServiceIcon(booking.serviceId),
                           color: AppTheme.primaryColor,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            booking.service.title,
+                            'Service ID: ${booking.serviceId}',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                               fontWeight: FontWeight.bold,
                             ),
@@ -113,7 +136,7 @@ class _BookingList extends StatelessWidget {
                         const Icon(Icons.pets, size: 16),
                         const SizedBox(width: 4),
                         Text(
-                          booking.pet.name,
+                          'Pet ID: ${booking.petId}',
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         const SizedBox(width: 16),
@@ -147,18 +170,30 @@ class _BookingList extends StatelessWidget {
                         mainAxisAlignment: MainAxisAlignment.end,
                         children: [
                           TextButton(
-                            onPressed: () {
-                              serviceProvider.cancelBooking(booking.id);
+                            onPressed: () async {
+                              try {
+                                await serviceProvider.cancelBooking(booking.id);
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error cancelling booking: $e')),
+                                );
+                              }
                             },
                             child: const Text('Cancel'),
                           ),
                           const SizedBox(width: 8),
                           ElevatedButton(
-                            onPressed: () {
-                              serviceProvider.updateBookingStatus(
-                                booking.id,
-                                BookingStatus.confirmed,
-                              );
+                            onPressed: () async {
+                              try {
+                                await serviceProvider.updateBookingStatus(
+                                  booking.id,
+                                  BookingStatus.confirmed,
+                                );
+                              } catch (e) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(content: Text('Error confirming booking: $e')),
+                                );
+                              }
                             },
                             child: const Text('Confirm'),
                           ),
@@ -188,19 +223,9 @@ class _BookingList extends StatelessWidget {
     }
   }
 
-  IconData _getServiceIcon(String category) {
-    switch (category.toLowerCase()) {
-      case 'walking':
-        return Icons.directions_walk;
-      case 'sitting':
-        return Icons.home;
-      case 'grooming':
-        return Icons.cut;
-      case 'healthcare':
-        return Icons.local_hospital;
-      default:
-        return Icons.pets;
-    }
+  IconData _getServiceIcon(String serviceId) {
+    // TODO: Implement service icon based on service category
+    return Icons.pets;
   }
 
   Widget _buildStatusChip(BuildContext context, BookingStatus status) {

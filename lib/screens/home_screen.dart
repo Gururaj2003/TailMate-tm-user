@@ -12,6 +12,7 @@ import 'package:tailmate/screens/service_providers_screen.dart';
 import 'package:tailmate/screens/chat_history_screen.dart';
 import 'package:tailmate/screens/profile_screen.dart';
 import 'package:tailmate/providers/user_provider.dart';
+import 'package:uuid/uuid.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -73,8 +74,31 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class _HomeTab extends StatelessWidget {
+class _HomeTab extends StatefulWidget {
   const _HomeTab();
+
+  @override
+  State<_HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<_HomeTab> {
+  @override
+  void initState() {
+    super.initState();
+    _loadServices();
+  }
+
+  Future<void> _loadServices() async {
+    try {
+      await Provider.of<ServiceProvider>(context, listen: false).loadServices();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading services: $e')),
+        );
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -300,41 +324,53 @@ class _HomeTab extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             // Services Section
-            Text(
-              'Pet Services',
-              style: Theme.of(context).textTheme.titleLarge,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Pet Services',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
             ),
             const SizedBox(height: 16),
             // Service Cards
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              mainAxisSpacing: 16,
-              crossAxisSpacing: 16,
-              childAspectRatio: 1.2,
-              children: const [
-                _ServiceCard(
-                  icon: Icons.pets,
-                  title: 'Pet Walking',
-                  color: Color(0xFFFFE0B2),
-                ),
-                _ServiceCard(
-                  icon: Icons.home,
-                  title: 'Pet Sitting',
-                  color: Color(0xFFB2DFDB),
-                ),
-                _ServiceCard(
-                  icon: Icons.cut,
-                  title: 'Grooming',
-                  color: Color(0xFFFFCDD2),
-                ),
-                _ServiceCard(
-                  icon: Icons.local_hospital,
-                  title: 'Vet Visit',
-                  color: Color(0xFFBBDEFB),
-                ),
-              ],
+            Consumer<ServiceProvider>(
+              builder: (context, serviceProvider, child) {
+                return GridView.count(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  crossAxisCount: 2,
+                  mainAxisSpacing: 16,
+                  crossAxisSpacing: 16,
+                  childAspectRatio: 1.2,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  children: [
+                    _ServiceCard(
+                      icon: Icons.pets,
+                      title: 'Pet Walking',
+                      color: const Color(0xFFFFE0B2),
+                      serviceProvider: serviceProvider,
+                    ),
+                    _ServiceCard(
+                      icon: Icons.home,
+                      title: 'Pet Sitting',
+                      color: const Color(0xFFB2DFDB),
+                      serviceProvider: serviceProvider,
+                    ),
+                    _ServiceCard(
+                      icon: Icons.cut,
+                      title: 'Grooming',
+                      color: const Color(0xFFFFCDD2),
+                      serviceProvider: serviceProvider,
+                    ),
+                    _ServiceCard(
+                      icon: Icons.local_hospital,
+                      title: 'Vet Visit',
+                      color: const Color(0xFFBBDEFB),
+                      serviceProvider: serviceProvider,
+                    ),
+                  ],
+                );
+              },
             ),
           ],
         ),
@@ -347,31 +383,44 @@ class _ServiceCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final Color color;
+  final ServiceProvider serviceProvider;
 
   const _ServiceCard({
     required this.icon,
     required this.title,
     required this.color,
+    required this.serviceProvider,
   });
 
   @override
   Widget build(BuildContext context) {
-    final serviceProvider = Provider.of<ServiceProvider>(context);
-    final service = serviceProvider.services.firstWhere(
-      (s) => s.title == title,
-      orElse: () => throw Exception('Service not found: $title'),
-    );
+    Service? service;
+    try {
+      service = serviceProvider.services.firstWhere(
+        (s) => s.title == title,
+      );
+    } catch (e) {
+      // Service not found, but we'll still show the card
+    }
 
     return Material(
       color: color.withOpacity(0.2),
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
         onTap: () {
-          Navigator.push(
+          final serviceToUse = service ?? Service(
+            id: title.toLowerCase().replaceAll(' ', '_'),
+            title: title,
+            description: 'Service description',
+            price: 0.0,
+            category: title.toLowerCase().replaceAll(' ', '_'),
+            duration: const Duration(minutes: 30),
+          );
+          
+          Navigator.pushNamed(
             context,
-            MaterialPageRoute(
-              builder: (context) => ServiceProvidersScreen(service: service),
-            ),
+            '/service_providers',
+            arguments: serviceToUse,
           );
         },
         borderRadius: BorderRadius.circular(16),
@@ -382,10 +431,10 @@ class _ServiceCard extends StatelessWidget {
             children: [
               Icon(
                 icon,
-                size: 32,
-                color: color.withOpacity(0.8),
+                size: 48,
+                color: Theme.of(context).primaryColor,
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               Text(
                 title,
                 style: Theme.of(context).textTheme.titleMedium,

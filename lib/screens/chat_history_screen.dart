@@ -26,10 +26,10 @@ class ChatHistoryScreen extends StatelessWidget {
                 final chat = chatHistory[index];
                 return ListTile(
                   leading: CircleAvatar(
-                    backgroundImage: chat.provider.imageUrl != null
-                        ? NetworkImage(chat.provider.imageUrl!)
+                    backgroundImage: chat.provider.profileImage != null
+                        ? NetworkImage(chat.provider.profileImage!)
                         : null,
-                    child: chat.provider.imageUrl == null
+                    child: chat.provider.profileImage == null
                         ? const Icon(Icons.person)
                         : null,
                   ),

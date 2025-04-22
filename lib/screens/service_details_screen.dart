@@ -29,6 +29,29 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
   String? _selectedPetId;
   final _formKey = GlobalKey<FormState>();
   final _notesController = TextEditingController();
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPets();
+  }
+
+  Future<void> _loadPets() async {
+    try {
+      print('Loading pets for service booking...');
+      await Provider.of<PetProvider>(context, listen: false).loadPets();
+      print('Pets loaded successfully');
+      setState(() {
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading pets: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading pets: $e')),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -62,7 +85,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
     }
   }
 
-  void _bookService() {
+  void _bookService() async {
     if (_formKey.currentState?.validate() ?? false) {
       if (_selectedDate == null || _selectedTime == null || _selectedPetId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -73,7 +96,6 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
 
       final petProvider = Provider.of<PetProvider>(context, listen: false);
       final serviceProvider = Provider.of<ServiceProvider>(context, listen: false);
-      final pet = petProvider.pets.firstWhere((pet) => pet.id == _selectedPetId);
 
       final dateTime = DateTime(
         _selectedDate!.year,
@@ -83,22 +105,27 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
         _selectedTime!.minute,
       );
 
-      final booking = Booking(
-        id: const Uuid().v4(),
-        service: widget.service,
-        pet: pet,
-        dateTime: dateTime,
-        notes: _notesController.text.isEmpty ? null : _notesController.text,
-      );
+      try {
+        await serviceProvider.addBooking(
+          providerId: widget.provider.id,
+          serviceId: widget.service.id,
+          petId: _selectedPetId!,
+          dateTime: dateTime,
+          amount: widget.service.price * widget.provider.priceMultiplier,
+          notes: _notesController.text.isEmpty ? null : _notesController.text,
+        );
 
-      serviceProvider.addBooking(booking);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Service booked successfully!')),
+        );
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Service booked successfully!')),
-      );
-
-      Navigator.pop(context);
-      Navigator.pop(context);
+        Navigator.pop(context);
+        Navigator.pop(context);
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error booking service: $e')),
+        );
+      }
     }
   }
 
@@ -106,6 +133,54 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
   Widget build(BuildContext context) {
     final finalPrice = widget.service.price * widget.provider.priceMultiplier;
     final pets = Provider.of<PetProvider>(context).pets;
+
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (pets.isEmpty) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(widget.service.title),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.pets,
+                size: 64,
+                color: AppTheme.greyColor,
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No Pets Available',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Please add a pet to book this service',
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: AppTheme.greyColor,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.pushNamed(context, '/add-pet');
+                },
+                icon: const Icon(Icons.add),
+                label: const Text('Add Pet'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -199,7 +274,7 @@ class _ServiceDetailsScreenState extends State<ServiceDetailsScreen> {
                             ],
                           ),
                           Text(
-                            '(${widget.provider.reviewCount})',
+                            '(${widget.provider.totalRatings})',
                             style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                   color: AppTheme.greyColor,
                                 ),

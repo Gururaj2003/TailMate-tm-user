@@ -25,10 +25,10 @@ class Pet {
       'name': name,
       'species': species,
       'breed': breed,
-      'birthDate': birthDate.toIso8601String(),
+      'birth_date': birthDate.toIso8601String(),
       'weight': weight,
       'gender': gender,
-      'imageUrl': imageUrl,
+      'image_url': imageUrl,
     };
   }
 
@@ -38,10 +38,10 @@ class Pet {
       name: map['name'],
       species: map['species'],
       breed: map['breed'],
-      birthDate: DateTime.parse(map['birthDate']),
+      birthDate: DateTime.parse(map['birth_date']),
       weight: map['weight'],
       gender: map['gender'],
-      imageUrl: map['imageUrl'],
+      imageUrl: map['image_url'],
     );
   }
 
@@ -53,6 +53,7 @@ class Pet {
     DateTime? birthDate,
     double? weight,
     String? gender,
+    String? imageUrl,
   }) {
     return Pet(
       id: id ?? this.id,
@@ -62,6 +63,7 @@ class Pet {
       birthDate: birthDate ?? this.birthDate,
       weight: weight ?? this.weight,
       gender: gender ?? this.gender,
+      imageUrl: imageUrl ?? this.imageUrl,
     );
   }
 } 

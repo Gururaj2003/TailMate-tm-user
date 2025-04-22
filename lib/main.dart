@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:tailmate/config/supabase_config.dart';
 import 'package:tailmate/screens/splash_screen.dart';
 import 'package:tailmate/theme/app_theme.dart';
 import 'package:tailmate/providers/theme_provider.dart';
@@ -24,20 +25,25 @@ import 'package:tailmate/screens/settings_screen.dart';
 import 'package:tailmate/screens/onboarding_screen.dart';
 import 'package:tailmate/models/service_provider_model.dart';
 import 'package:tailmate/screens/chat_history_screen.dart';
+import 'package:tailmate/models/service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   try {
+    // Validate Supabase configuration
+    SupabaseConfig.validateConfig();
+    
     await Supabase.initialize(
-      url: 'https://vbbjpxjubbfjcgtiituc.supabase.co',
-      anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiYmpweGp1YmJmamNndGlpdHVjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNDE2ODIsImV4cCI6MjA1NjgxNzY4Mn0.cU73zqfgob-Ho0SZzZTwtuv_BVbphwb4bzV6LdjNUQk',
-      debug: true, // Enable debug mode for more detailed logs
+      url: SupabaseConfig.url,
+      anonKey: SupabaseConfig.anonKey,
+      debug: true,
     );
     print('Supabase initialized successfully');
-  } catch (e) {
+  } catch (e, stackTrace) {
     print('Error initializing Supabase: $e');
-    // Show error dialog or handle the error appropriately
+    print('Stack trace: $stackTrace');
+    // You might want to show an error dialog or handle this differently
   }
 
   runApp(
@@ -60,7 +66,6 @@ class TailMateApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = Provider.of<ThemeProvider>(context);
-    final supabase = Supabase.instance.client;
     
     return MaterialApp(
       title: 'TailMate',
@@ -68,32 +73,20 @@ class TailMateApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeProvider.themeMode,
-      home: StreamBuilder<AuthState>(
-        stream: supabase.auth.onAuthStateChange,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const SplashScreen();
-          }
-
-          if (snapshot.hasError) {
-            print('Auth state error: ${snapshot.error}');
-            return const OnboardingScreen();
-          }
-
-          final session = snapshot.data?.session;
-          if (session == null) {
-            return const OnboardingScreen();
-          }
-
-          return const HomeScreen();
-        },
-      ),
+      home: const OnboardingScreen(), // Start with onboarding screen
       routes: {
         '/chat': (context) => ChatScreen(
               provider: ModalRoute.of(context)!.settings.arguments
                   as ServiceProviderModel,
             ),
         '/chat-history': (context) => const ChatHistoryScreen(),
+        '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
+        '/home': (context) => const HomeScreen(),
+        '/service_providers': (context) {
+          final service = ModalRoute.of(context)!.settings.arguments as Service;
+          return ServiceProvidersScreen(service: service);
+        },
       },
       builder: (context, child) {
         return ScrollConfiguration(

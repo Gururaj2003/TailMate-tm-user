@@ -127,21 +127,28 @@ class _PetFormScreenState extends State<PetFormScreen> {
       }
 
       final petProvider = Provider.of<PetProvider>(context, listen: false);
-      final pet = Pet(
-        id: widget.pet?.id ?? const Uuid().v4(),
-        name: _nameController.text,
-        species: _selectedSpecies,
-        breed: _breedController.text,
-        birthDate: _selectedDate!,
-        weight: double.parse(_weightController.text),
-        gender: _selectedGender,
-        imageUrl: _imageUrl,
-      );
-
+      
       if (widget.pet == null) {
-        petProvider.addPet(pet);
+        petProvider.addPet(
+          name: _nameController.text,
+          species: _selectedSpecies,
+          breed: _breedController.text,
+          birthDate: _selectedDate!,
+          weight: double.parse(_weightController.text),
+          gender: _selectedGender,
+          imageUrl: _imageUrl,
+        );
       } else {
-        petProvider.updatePet(pet);
+        petProvider.updatePet(Pet(
+          id: widget.pet!.id,
+          name: _nameController.text,
+          species: _selectedSpecies,
+          breed: _breedController.text,
+          birthDate: _selectedDate!,
+          weight: double.parse(_weightController.text),
+          gender: _selectedGender,
+          imageUrl: _imageUrl,
+        ));
       }
 
       Navigator.pop(context);
