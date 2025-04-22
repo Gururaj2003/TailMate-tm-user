@@ -1,8 +1,11 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tailmate/models/booking.dart';
+import 'package:tailmate/models/service_provider.dart';
 
 class SupabaseService {
-  final SupabaseClient _supabase = Supabase.instance.client;
+  final SupabaseClient _supabase;
+
+  SupabaseService(this._supabase);
 
   // Get current user
   User? get currentUser => _supabase.auth.currentUser;
@@ -18,66 +21,13 @@ class SupabaseService {
     String email,
     String password,
   ) async {
-    try {
-      print('Attempting to sign in user: $email');
-      final response = await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      
-      if (response.user == null) {
-        throw Exception('Failed to sign in. Please check your credentials.');
-      }
-
-      // Check if email is verified
-      if (response.user?.emailConfirmedAt == null) {
-        print('User email not verified: ${response.user!.email}');
-        // Sign out the user since they're not verified
-        await _supabase.auth.signOut();
-        throw Exception('Please verify your email before signing in. Check your inbox for the verification link.');
-      }
-
-      // Try to get the user's profile
-      try {
-        final profile = await _supabase
-            .from('profiles')
-            .select()
-            .eq('id', response.user!.id)
-            .single();
-        print('Found existing profile');
-      } catch (e) {
-        print('Profile not found, creating new profile');
-        // If profile doesn't exist, create one
-        try {
-          await _supabase.from('profiles').upsert({
-            'id': response.user!.id,
-            'email': response.user!.email,
-            'name': response.user!.userMetadata?['name'] ?? response.user!.email?.split('@')[0],
-            'created_at': DateTime.now().toIso8601String(),
-            'updated_at': DateTime.now().toIso8601String(),
-          });
-          print('Created new profile for user');
-        } catch (profileError) {
-          print('Error creating profile: $profileError');
-          // Don't throw here, allow login even if profile creation fails
-        }
-      }
-      
-      print('Sign in successful for user: ${response.user!.email}');
-      return response;
-    } on AuthException catch (e) {
-      print('Auth error during sign in: ${e.message}');
-      if (e.message.contains('Invalid login credentials')) {
-        throw Exception('Invalid email or password. Please try again.');
-      } else if (e.message.contains('Email not confirmed')) {
-        throw Exception('Please verify your email before signing in. Check your inbox for the verification link.');
-      } else {
-        throw Exception(e.message);
-      }
-    } catch (e) {
-      print('Error during sign in: $e');
-      throw Exception('An error occurred during sign in. Please try again.');
-    }
+    print('Attempting to sign in user: $email');
+    final response = await _supabase.auth.signInWithPassword(
+      email: email,
+      password: password,
+    );
+    print('Sign in response: ${response.user?.id}');
+    return response;
   }
 
   // Register with email and password
@@ -86,70 +36,54 @@ class SupabaseService {
     String password,
     String name,
   ) async {
+    print('Starting registration process for $email');
+    
+    // First, create the user in Supabase Auth
+    print('Creating user in Supabase Auth...');
+    final response = await _supabase.auth.signUp(
+      email: email,
+      password: password,
+      data: {
+        'name': name,
+      },
+      emailRedirectTo: 'io.supabase.tailmate://login-callback/verification'
+    );
+
+    print('Auth signup response received: ${response.user != null}');
+    if (response.user == null) {
+      print('Failed to create user account');
+      throw Exception('Failed to create user account. Please try again.');
+    }
+
+    print('Auth signup successful for user: ${response.user!.email}');
+    
+    // Then create the profile in the profiles table
+    print('Creating user profile in database...');
     try {
-      print('Starting registration process for $email');
+      final profileResponse = await _supabase.from('profiles').upsert({
+        'id': response.user!.id,
+        'name': name,
+        'email': email,
+        'created_at': DateTime.now().toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }).select();
+
+      print('Profile creation response: $profileResponse');
       
-      // First, create the user in Supabase Auth
-      print('Creating user in Supabase Auth...');
-      final response = await _supabase.auth.signUp(
-        email: email,
-        password: password,
-        data: {
-          'name': name,
-        },
-        emailRedirectTo: 'io.supabase.tailmate://login-callback/verification'
-      );
-
-      print('Auth signup response received: ${response.user != null}');
-      if (response.user == null) {
-        print('Failed to create user account');
-        throw Exception('Failed to create user account. Please try again.');
+      if (profileResponse.isEmpty) {
+        print('Failed to create profile');
+        throw Exception('Failed to create user profile. Please try again.');
       }
 
-      print('Auth signup successful for user: ${response.user!.email}');
-      
-      // Then create the profile in the profiles table
-      print('Creating user profile in database...');
-      try {
-        final profileResponse = await _supabase.from('profiles').upsert({
-          'id': response.user!.id,
-          'name': name,
-          'email': email,
-          'created_at': DateTime.now().toIso8601String(),
-          'updated_at': DateTime.now().toIso8601String(),
-        }).select();
-
-        print('Profile creation response: $profileResponse');
-        
-        if (profileResponse.isEmpty) {
-          print('Failed to create profile');
-          throw Exception('Failed to create user profile. Please try again.');
-        }
-
-        print('Profile created successfully');
-        print('Registration process completed successfully');
-        print('Verification email has been sent to $email');
-        return response;
-      } catch (e) {
-        print('Error creating profile: $e');
-        // If profile creation fails, we should still return the auth response
-        // since the user was created successfully
-        return response;
-      }
-    } on AuthException catch (e) {
-      print('Auth error during registration: ${e.message}');
-      if (e.message.contains('already registered')) {
-        throw Exception('This email is already registered. Please try logging in instead.');
-      } else if (e.message.contains('password')) {
-        throw Exception('Password must be at least 6 characters long.');
-      } else if (e.message.contains('email')) {
-        throw Exception('Please enter a valid email address.');
-      } else {
-        throw Exception('Registration failed: ${e.message}');
-      }
+      print('Profile created successfully');
+      print('Registration process completed successfully');
+      print('Verification email has been sent to $email');
+      return response;
     } catch (e) {
-      print('Error during registration: $e');
-      throw Exception('An error occurred during registration. Please try again.');
+      print('Error creating profile: $e');
+      // If profile creation fails, we should still return the auth response
+      // since the user was created successfully
+      return response;
     }
   }
 
@@ -216,8 +150,7 @@ class SupabaseService {
       if (address != null) updates['address'] = address;
       if (profileImage != null) updates['profile_image'] = profileImage;
 
-      final response = await _supabase
-          .from('profiles')
+      final response = await _supabase.from('profiles')
           .update(updates)
           .eq('id', userId)
           .select();
@@ -239,8 +172,7 @@ class SupabaseService {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('No user logged in');
 
-      final response = await _supabase
-          .from('profiles')
+      final response = await _supabase.from('profiles')
           .select()
           .eq('id', userId)
           .single();
@@ -275,8 +207,7 @@ class SupabaseService {
       }
       print('Current user ID: $userId');
 
-      final response = await _supabase
-          .from('pets')
+      final response = await _supabase.from('pets')
           .select()
           .eq('owner_id', userId)
           .order('created_at', ascending: false);
@@ -308,8 +239,7 @@ class SupabaseService {
       }
       print('Current user ID: $userId');
 
-      final response = await _supabase
-          .from('pets')
+      final response = await _supabase.from('pets')
           .select('*')
           .eq('owner_id', userId)
           .order('created_at', ascending: false);
@@ -351,8 +281,7 @@ class SupabaseService {
 
       // First verify the user has a profile
       try {
-        final profile = await _supabase
-            .from('profiles')
+        final profile = await _supabase.from('profiles')
             .select()
             .eq('id', userId)
             .single();
@@ -396,8 +325,7 @@ class SupabaseService {
       print('Insert response: $insertResponse');
 
       // Then fetch the inserted pet
-      final response = await _supabase
-          .from('pets')
+      final response = await _supabase.from('pets')
           .select()
           .eq('owner_id', userId)
           .eq('name', name)
@@ -449,8 +377,7 @@ class SupabaseService {
       print('Update data: $updates');
 
       // First verify the pet exists and belongs to the user
-      final existingPet = await _supabase
-          .from('pets')
+      final existingPet = await _supabase.from('pets')
           .select()
           .eq('id', petId)
           .eq('owner_id', userId)
@@ -459,8 +386,7 @@ class SupabaseService {
       print('Found existing pet: ${existingPet['name']}');
 
       // Perform the update
-      final response = await _supabase
-          .from('pets')
+      final response = await _supabase.from('pets')
           .update(updates)
           .eq('id', petId)
           .eq('owner_id', userId)
@@ -486,8 +412,7 @@ class SupabaseService {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('No user logged in');
 
-      await _supabase
-          .from('pets')
+      await _supabase.from('pets')
           .delete()
           .eq('id', petId)
           .eq('owner_id', userId);
@@ -503,23 +428,45 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getServiceProviders() async {
     print('Fetching service providers from Supabase...');
     try {
-      final response = await _supabase
-          .from('service_providers')
+      // Check if Supabase client is initialized
+      if (_supabase == null) {
+        print('Error: Supabase client is not initialized');
+        throw Exception('Unable to connect to the server. Please try again later.');
+      }
+
+      // Check internet connection
+      try {
+        print('Checking database connection...');
+        await _supabase.from('service_providers').select('count').limit(1);
+        print('Database connection successful');
+      } catch (e) {
+        print('Error connecting to database: $e');
+        throw Exception('Unable to connect to the server. Please check your internet connection.');
+      }
+
+      final response = await _supabase.from('service_providers')
           .select('*')
           .order('name');
+          
       print('Successfully fetched ${response.length} service providers');
       print('First provider data: ${response.isNotEmpty ? response.first : 'No providers found'}');
       return response;
     } catch (e) {
       print('Error fetching service providers: $e');
-      rethrow;
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        throw Exception('Unable to connect to the server. Please check your internet connection.');
+      } else {
+        throw Exception('Failed to fetch service providers. Please try again later.');
+      }
     }
   }
 
   Future<Map<String, dynamic>> getServiceProvider(String providerId) async {
     try {
-      final response = await _supabase
-          .from('service_providers')
+      final response = await _supabase.from('service_providers')
           .select()
           .eq('id', providerId)
           .single();
@@ -534,23 +481,73 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getServices() async {
     print('Fetching services from Supabase...');
     try {
-      final response = await _supabase
-          .from('services')
-          .select('*')
+      // Check if Supabase client is initialized
+      if (_supabase == null) {
+        print('Error: Supabase client is not initialized');
+        throw Exception('Unable to connect to the server. Please try again later.');
+      }
+
+      // Check internet connection
+      try {
+        print('Checking database connection...');
+        await _supabase.from('services').select('count').limit(1);
+        print('Database connection successful');
+      } catch (e) {
+        print('Error connecting to database: $e');
+        throw Exception('Unable to connect to the server. Please check your internet connection.');
+      }
+
+      // Fetch services with their providers
+      final response = await _supabase.from('services')
+          .select('''
+            *,
+            service_providers!provider_id(
+              id,
+              name,
+              email,
+              phone,
+              address,
+              rating,
+              total_ratings,
+              is_verified,
+              specialties,
+              description,
+              price_multiplier,
+              location
+            )
+          ''')
           .order('name');
+          
       print('Successfully fetched ${response.length} services');
       print('First service data: ${response.isNotEmpty ? response.first : 'No services found'}');
-      return response;
+      
+      // Process the response to ensure proper data structure
+      final processedResponse = response.map((service) {
+        // Ensure provider data is properly structured
+        if (service['service_providers'] != null) {
+          service['provider'] = service['service_providers'];
+          service.remove('service_providers');
+        }
+        return service;
+      }).toList();
+      
+      return processedResponse;
     } catch (e) {
       print('Error fetching services: $e');
-      rethrow;
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        throw Exception('Unable to connect to the server. Please check your internet connection.');
+      } else {
+        throw Exception('Failed to fetch services. Please try again later.');
+      }
     }
   }
 
   Future<List<Map<String, dynamic>>> getServicesByProvider(String providerId) async {
     try {
-      final response = await _supabase
-          .from('services')
+      final response = await _supabase.from('services')
           .select()
           .eq('provider_id', providerId)
           .order('name');
@@ -572,8 +569,13 @@ class SupabaseService {
     String? notes,
   }) async {
     try {
+      print('Starting to create booking...');
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) throw Exception('No user logged in');
+      if (userId == null) {
+        print('Error: No user logged in');
+        throw Exception('No user logged in');
+      }
+      print('Current user ID: $userId');
 
       final booking = {
         'user_id': userId,
@@ -590,41 +592,168 @@ class SupabaseService {
         'updated_at': DateTime.now().toIso8601String(),
       };
 
-      final response = await _supabase
-          .from('bookings')
+      print('Booking data to insert: $booking');
+
+      // First verify the provider exists
+      try {
+        final provider = await _supabase.from('service_providers')
+            .select()
+            .eq('id', providerId)
+            .single();
+        print('Found provider: ${provider['name']}');
+      } catch (e) {
+        print('Error verifying provider: $e');
+        throw Exception('Invalid service provider');
+      }
+
+      // Verify the service exists
+      try {
+        final service = await _supabase.from('services')
+            .select()
+            .eq('id', serviceId)
+            .single();
+        print('Found service: ${service['name']}');
+      } catch (e) {
+        print('Error verifying service: $e');
+        throw Exception('Invalid service');
+      }
+
+      // Verify the pet exists and belongs to the user
+      try {
+        final pet = await _supabase.from('pets')
+            .select()
+            .eq('id', petId)
+            .eq('owner_id', userId)
+            .single();
+        print('Found pet: ${pet['name']}');
+      } catch (e) {
+        print('Error verifying pet: $e');
+        throw Exception('Invalid pet or pet does not belong to you');
+      }
+
+      // Create the booking
+      print('Inserting booking into database...');
+      final response = await _supabase.from('bookings')
           .insert(booking)
           .select()
           .single();
 
+      print('Booking created successfully: ${response['id']}');
+      print('Full booking response: $response');
+
+      // Verify the booking exists in the database
+      try {
+        final verifyBooking = await _supabase.from('bookings')
+            .select('''
+              *,
+              services!service_id(*),
+              service_providers!provider_id(*),
+              pets!pet_id(*)
+            ''')
+            .eq('id', response['id'])
+            .single();
+        print('Verified booking exists in database: $verifyBooking');
+      } catch (e) {
+        print('Error verifying booking in database: $e');
+      }
+
       return response;
     } catch (e) {
       print('Error creating booking: $e');
-      throw Exception('Failed to create booking');
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+      }
+      throw Exception('Failed to create booking. Please try again.');
     }
   }
 
+  // Get user bookings with improved error handling
   Future<List<Map<String, dynamic>>> getUserBookings() async {
     try {
-      final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) throw Exception('No user logged in');
+      print('Starting getUserBookings...');
+      
+      // Check if Supabase client is initialized
+      if (_supabase == null) {
+        print('Error: Supabase client not initialized');
+        throw Exception('Unable to connect to the server');
+      }
 
-      final response = await _supabase
-          .from('bookings')
-          .select('*, services(*), service_providers(*)')
+      // Check if user is logged in
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) {
+        print('Error: No user logged in');
+        throw Exception('No user logged in');
+      }
+      print('Current user ID: $userId');
+
+      // Test database connection
+      try {
+        print('Testing database connection...');
+        await _supabase.from('bookings').select('count').limit(1);
+        print('Database connection successful');
+      } catch (e) {
+        print('Error testing database connection: $e');
+        throw Exception('Unable to connect to the server. Please check your internet connection');
+      }
+
+      print('Fetching bookings...');
+      final response = await _supabase.from('bookings')
+          .select('''
+            *,
+            services!service_id(*),
+            service_providers!provider_id(*),
+            pets!pet_id(*)
+          ''')
           .eq('user_id', userId)
           .order('created_at', ascending: false);
 
-      return List<Map<String, dynamic>>.from(response);
+      print('Raw response from Supabase: $response');
+      
+      if (response == null) {
+        print('Error: Null response from Supabase');
+        throw Exception('Failed to load bookings');
+      }
+
+      final bookings = List<Map<String, dynamic>>.from(response);
+      print('Successfully parsed ${bookings.length} bookings');
+      
+      if (bookings.isEmpty) {
+        print('No bookings found for user');
+        return [];
+      }
+
+      // Log each booking for debugging
+      for (var booking in bookings) {
+        print('Booking ID: ${booking['id']}');
+        print('Service: ${booking['services']}');
+        print('Provider: ${booking['service_providers']}');
+        print('Pet: ${booking['pets']}');
+      }
+
+      return bookings;
     } catch (e) {
-      print('Error getting bookings: $e');
-      throw Exception('Failed to fetch bookings');
+      print('Error in getUserBookings: $e');
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        throw Exception('Unable to connect to the server. Please check your internet connection');
+      } else if (e.toString().contains('No user logged in')) {
+        throw Exception('Please sign in to view your bookings');
+      } else if (e.toString().contains('network')) {
+        throw Exception('Please check your internet connection and try again');
+      } else {
+        print('Stack trace: ${StackTrace.current}');
+        throw Exception('Failed to load bookings. Please try again later');
+      }
     }
   }
 
   Future<void> updateBookingStatus(String bookingId, BookingStatus status) async {
     try {
-      await _supabase
-          .from('bookings')
+      await _supabase.from('bookings')
           .update({
             'status': status.toString().split('.').last,
             'updated_at': DateTime.now().toIso8601String(),
@@ -642,8 +771,7 @@ class SupabaseService {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('No user logged in');
 
-      final response = await _supabase
-          .from('chat_history')
+      final response = await _supabase.from('chat_history')
           .select()
           .or('sender_id.eq.${userId},receiver_id.eq.${userId}')
           .eq('receiver_id', providerId)
@@ -682,8 +810,7 @@ class SupabaseService {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) throw Exception('No user logged in');
 
-      await _supabase
-          .from('chat_history')
+      await _supabase.from('chat_history')
           .update({'is_read': true})
           .eq('receiver_id', userId)
           .eq('sender_id', providerId)
@@ -691,6 +818,185 @@ class SupabaseService {
     } catch (e) {
       print('Error marking messages as read: $e');
       throw Exception('Failed to mark messages as read');
+    }
+  }
+
+  Future<void> updatePaymentStatus({
+    required String bookingId,
+    required String status,
+  }) async {
+    try {
+      print('Starting to update payment status...');
+      print('Booking ID: $bookingId');
+      print('New status: $status');
+
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) {
+        print('Error: No user logged in');
+        throw Exception('No user logged in');
+      }
+
+      // Verify the booking exists and belongs to the user
+      try {
+        final booking = await _supabase.from('bookings')
+            .select()
+            .eq('id', bookingId)
+            .eq('user_id', userId)
+            .single();
+        print('Found booking: ${booking['id']}');
+      } catch (e) {
+        print('Error verifying booking: $e');
+        throw Exception('Invalid booking or booking does not belong to you');
+      }
+
+      // Update the payment status
+      print('Updating payment status...');
+      final response = await _supabase.from('bookings')
+          .update({
+            'payment_status': status,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', bookingId)
+          .select()
+          .single();
+
+      print('Payment status updated successfully: $response');
+    } catch (e) {
+      print('Error updating payment status: $e');
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+      }
+      throw Exception('Failed to update payment status. Please try again.');
+    }
+  }
+
+  Future<void> cancelBooking(String bookingId) async {
+    try {
+      print('Starting to cancel booking...');
+      print('Booking ID: $bookingId');
+
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) {
+        print('Error: No user logged in');
+        throw Exception('No user logged in');
+      }
+
+      // Verify the booking exists and belongs to the user
+      try {
+        final booking = await _supabase.from('bookings')
+            .select()
+            .eq('id', bookingId)
+            .eq('user_id', userId)
+            .single();
+        print('Found booking: ${booking['id']}');
+      } catch (e) {
+        print('Error verifying booking: $e');
+        throw Exception('Invalid booking or booking does not belong to you');
+      }
+
+      // Update the booking status to cancelled
+      print('Updating booking status to cancelled...');
+      final response = await _supabase.from('bookings')
+          .update({
+            'status': 'cancelled',
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', bookingId)
+          .select()
+          .single();
+
+      print('Booking cancelled successfully: $response');
+    } catch (e) {
+      print('Error cancelling booking: $e');
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+      }
+      throw Exception('Failed to cancel booking. Please try again.');
+    }
+  }
+
+  Future<List<ServiceProvider>> getProvidersForService(String serviceId) async {
+    print('Getting providers for service ID: $serviceId');
+    try {
+      if (_supabase == null) {
+        throw Exception('Supabase client not initialized');
+      }
+
+      // If it's a default service ID, get all providers
+      if (serviceId == 'default') {
+        print('Default service ID detected, fetching all providers');
+        final response = await _supabase.from('service_providers')
+            .select('*')
+            .order('name');
+
+        print('Raw response for default service: $response');
+
+        if (response.isEmpty) {
+          print('No providers found');
+          return [];
+        }
+
+        final providers = response.map((data) {
+          print('Processing provider data: $data');
+          try {
+            final provider = ServiceProvider.fromMap(data);
+            print('Successfully created provider: ${provider.name} (ID: ${provider.id})');
+            return provider;
+          } catch (e) {
+            print('Error creating provider from data: $e');
+            print('Problematic data: $data');
+            rethrow;
+          }
+        }).toList();
+
+        print('Successfully processed ${providers.length} providers for default service');
+        return providers;
+      }
+
+      // For specific service IDs, get providers that offer that service
+      print('Fetching providers for specific service: $serviceId');
+      final response = await _supabase.from('service_providers')
+          .select('*, services!service_id(*)')
+          .eq('service_id', serviceId);
+
+      print('Raw response for specific service: $response');
+
+      if (response.isEmpty) {
+        print('No providers found for service $serviceId');
+        return [];
+      }
+
+      final providers = response.map((data) {
+        print('Processing provider data: $data');
+        try {
+          final provider = ServiceProvider.fromMap(data);
+          print('Successfully created provider: ${provider.name} (ID: ${provider.id})');
+          return provider;
+        } catch (e) {
+          print('Error creating provider from data: $e');
+          print('Problematic data: $data');
+          rethrow;
+        }
+      }).toList();
+
+      print('Successfully processed ${providers.length} providers for service $serviceId');
+      return providers;
+    } catch (e) {
+      print('Error in getProvidersForService: $e');
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        throw Exception('Database error: ${e.message}');
+      } else if (e.toString().contains('network')) {
+        throw Exception('Please check your internet connection and try again');
+      } else {
+        throw Exception('Failed to load providers: ${e.toString()}');
+      }
     }
   }
 } 

@@ -19,6 +19,9 @@ class ServiceProvidersScreen extends StatefulWidget {
 }
 
 class _ServiceProvidersScreenState extends State<ServiceProvidersScreen> {
+  bool _isLoading = true;
+  String? _error;
+
   @override
   void initState() {
     super.initState();
@@ -28,12 +31,21 @@ class _ServiceProvidersScreenState extends State<ServiceProvidersScreen> {
 
   Future<void> _loadProviders() async {
     try {
+      setState(() {
+        _isLoading = true;
+        _error = null;
+      });
+
       print('Loading providers for service: ${widget.service.title}');
       await context.read<ServiceProvider>().loadServiceProviders();
       final providers = context.read<ServiceProvider>().getProvidersForService(widget.service.id);
       print('Found ${providers.length} providers for service ${widget.service.title}');
+      
       if (providers.isEmpty) {
         print('No providers found for service ${widget.service.title}');
+        setState(() {
+          _error = 'No service providers available for ${widget.service.title} at the moment.';
+        });
       } else {
         print('Provider details:');
         for (var provider in providers) {
@@ -44,6 +56,13 @@ class _ServiceProvidersScreenState extends State<ServiceProvidersScreen> {
       }
     } catch (e) {
       print('Error loading providers: $e');
+      setState(() {
+        _error = 'Unable to load service providers. Please check your internet connection and try again.';
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
   }
 
@@ -52,53 +71,94 @@ class _ServiceProvidersScreenState extends State<ServiceProvidersScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text('${widget.service.title} Providers'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadProviders,
+          ),
+        ],
       ),
-      body: Consumer<ServiceProvider>(
-        builder: (context, serviceProvider, child) {
-          print('Building providers list for service: ${widget.service.id}');
-          final providers = serviceProvider.getProvidersForService(widget.service.id);
-          print('Retrieved ${providers.length} providers for display');
-
-          if (providers.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(
-                    Icons.search_off,
-                    size: 64,
-                    color: AppTheme.greyColor,
-                  ),
-                  const SizedBox(height: 16),
-                  Text(
-                    'No providers available',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Please try again later',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppTheme.greyColor,
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red,
                         ),
+                        const SizedBox(height: 16),
+                        Text(
+                          'Oops! Something went wrong',
+                          style: Theme.of(context).textTheme.titleLarge,
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _error!,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: _loadProviders,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Try Again'),
+                        ),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            );
-          }
+                )
+              : Consumer<ServiceProvider>(
+                  builder: (context, serviceProvider, child) {
+                    print('Building providers list for service: ${widget.service.id}');
+                    final providers = serviceProvider.getProvidersForService(widget.service.id);
+                    print('Retrieved ${providers.length} providers for display');
 
-          return ListView.builder(
-            padding: const EdgeInsets.all(16),
-            itemCount: providers.length,
-            itemBuilder: (context, index) {
-              final provider = providers[index];
-              return _ProviderCard(
-                provider: provider,
-                service: widget.service,
-              );
-            },
-          );
-        },
-      ),
+                    if (providers.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.search_off,
+                              size: 64,
+                              color: AppTheme.greyColor,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No providers available',
+                              style: Theme.of(context).textTheme.titleLarge,
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Please try again later',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    color: AppTheme.greyColor,
+                                  ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: providers.length,
+                      itemBuilder: (context, index) {
+                        final provider = providers[index];
+                        return _ProviderCard(
+                          provider: provider,
+                          service: widget.service,
+                        );
+                      },
+                    );
+                  },
+                ),
     );
   }
 }

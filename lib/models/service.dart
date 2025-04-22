@@ -6,6 +6,7 @@ class Service {
   final String? imageUrl;
   final String category;
   final Duration duration;
+  final String providerId;
 
   Service({
     required this.id,
@@ -15,6 +16,7 @@ class Service {
     this.imageUrl,
     required this.category,
     required this.duration,
+    required this.providerId,
   });
 
   Map<String, dynamic> toMap() {
@@ -26,6 +28,7 @@ class Service {
       'image_url': imageUrl,
       'category': category,
       'duration': duration.inMinutes,
+      'provider_id': providerId,
     };
   }
 
@@ -40,8 +43,9 @@ class Service {
         imageUrl: map['image_url'] as String?,
         category: map['category'] as String,
         duration: Duration(minutes: (map['duration'] as num).toInt()),
+        providerId: map['provider_id'] as String,
       );
-      print('Created service: ${service.title} (ID: ${service.id})');
+      print('Created service: ${service.title} (ID: ${service.id}) with provider ID: ${service.providerId}');
       return service;
     } catch (e) {
       print('Error creating Service: $e');

@@ -13,26 +13,26 @@ class EditProfileScreen extends StatefulWidget {
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
-  late TextEditingController _emailController;
   late TextEditingController _phoneController;
   late TextEditingController _addressController;
   String? _profileImage;
+  bool _isLoading = false;
 
   @override
   void initState() {
     super.initState();
-    final user = Provider.of<UserProvider>(context, listen: false).currentUser;
-    _nameController = TextEditingController(text: user?.name);
-    _emailController = TextEditingController(text: user?.email);
-    _phoneController = TextEditingController(text: user?.phoneNumber);
-    _addressController = TextEditingController(text: user?.address);
-    _profileImage = user?.profileImage;
+    final user = context.read<UserProvider>().currentUser;
+    final userProfile = context.read<UserProvider>().userProfile;
+    
+    _nameController = TextEditingController(text: userProfile?.name ?? '');
+    _phoneController = TextEditingController(text: userProfile?.phoneNumber ?? '');
+    _addressController = TextEditingController(text: userProfile?.address ?? '');
+    _profileImage = userProfile?.profileImage;
   }
 
   @override
   void dispose() {
     _nameController.dispose();
-    _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
     super.dispose();
@@ -41,18 +41,33 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
   Future<void> _updateProfile() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final userProvider = Provider.of<UserProvider>(context, listen: false);
-    await userProvider.updateProfile(
-      name: _nameController.text,
-      phoneNumber: _phoneController.text,
-      address: _addressController.text,
-    );
+    setState(() => _isLoading = true);
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Profile updated successfully')),
+    try {
+      final userProvider = context.read<UserProvider>();
+      await userProvider.updateProfile(
+        name: _nameController.text,
+        phoneNumber: _phoneController.text,
+        address: _addressController.text,
+        profileImage: _profileImage,
       );
-      Navigator.pop(context);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Profile updated successfully')),
+        );
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error updating profile: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -69,7 +84,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
           child: Column(
             children: [
               GestureDetector(
-                onTap: () {
+                onTap: () async {
                   // TODO: Implement image picker
                 },
                 child: CircleAvatar(
@@ -82,7 +97,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       : null,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
                 decoration: const InputDecoration(
@@ -98,29 +113,18 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
               ),
               const SizedBox(height: 16),
               TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(
-                  labelText: 'Email',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (value) {
-                  if (value == null || value.isEmpty) {
-                    return 'Please enter your email';
-                  }
-                  if (!value.contains('@')) {
-                    return 'Please enter a valid email';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
                 controller: _phoneController,
                 decoration: const InputDecoration(
                   labelText: 'Phone Number',
                   border: OutlineInputBorder(),
                 ),
                 keyboardType: TextInputType.phone,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your phone number';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
               TextFormField(
@@ -130,17 +134,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your address';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _updateProfile,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                  ),
-                  child: const Text('Save Changes'),
-                ),
+              ElevatedButton(
+                onPressed: _isLoading ? null : _updateProfile,
+                child: _isLoading
+                    ? const CircularProgressIndicator()
+                    : const Text('Update Profile'),
               ),
             ],
           ),

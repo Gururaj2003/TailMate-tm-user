@@ -6,6 +6,7 @@ import 'package:tailmate/providers/pet_provider.dart';
 import 'package:tailmate/theme/app_theme.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class PetFormScreen extends StatefulWidget {
   final Pet? pet;
@@ -29,6 +30,7 @@ class _PetFormScreenState extends State<PetFormScreen> {
   String? _imageUrl;
   File? _imageFile;
   final _imagePicker = ImagePicker();
+  final _supabase = Supabase.instance.client;
 
   @override
   void initState() {
@@ -51,56 +53,30 @@ class _PetFormScreenState extends State<PetFormScreen> {
     super.dispose();
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _pickImage() async {
     try {
-      final pickedFile = await _imagePicker.pickImage(
-        source: source,
-        maxWidth: 1000,
-        maxHeight: 1000,
-        imageQuality: 85,
+      final XFile? pickedFile = await _imagePicker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 80,
       );
 
       if (pickedFile != null) {
         setState(() {
           _imageFile = File(pickedFile.path);
-          _imageUrl = null; // Clear the URL when a new image is picked
+          _imageUrl = null;
         });
       }
     } catch (e) {
+      print('Error picking image: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to pick image')),
+        SnackBar(
+          content: Text('Error picking image: ${e.toString()}'),
+          backgroundColor: Colors.red,
+        ),
       );
     }
-  }
-
-  void _showImagePickerModal() {
-    showModalBottomSheet(
-      context: context,
-      builder: (BuildContext context) {
-        return SafeArea(
-          child: Wrap(
-            children: [
-              ListTile(
-                leading: const Icon(Icons.photo_library),
-                title: const Text('Choose from Gallery'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.gallery);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.photo_camera),
-                title: const Text('Take a Photo'),
-                onTap: () {
-                  Navigator.pop(context);
-                  _pickImage(ImageSource.camera);
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -117,7 +93,37 @@ class _PetFormScreenState extends State<PetFormScreen> {
     }
   }
 
-  void _savePet() {
+  Future<String?> _uploadImage() async {
+    if (_imageFile == null) return _imageUrl;
+
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) {
+        throw Exception('No user logged in');
+      }
+
+      final fileExt = _imageFile!.path.split('.').last;
+      final fileName = '${const Uuid().v4()}.$fileExt';
+      final filePath = 'pets/$userId/$fileName';
+
+      print('Uploading image to Supabase storage...');
+      print('File path: $filePath');
+
+      await _supabase.storage.from('pet_images').upload(filePath, _imageFile!);
+      
+      final imageUrl = _supabase.storage
+          .from('pet_images')
+          .getPublicUrl(filePath);
+
+      print('Image uploaded successfully. URL: $imageUrl');
+      return imageUrl;
+    } catch (e) {
+      print('Error uploading image: $e');
+      throw Exception('Failed to upload image: ${e.toString()}');
+    }
+  }
+
+  Future<void> _savePet() async {
     if (_formKey.currentState!.validate()) {
       if (_selectedDate == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -126,32 +132,64 @@ class _PetFormScreenState extends State<PetFormScreen> {
         return;
       }
 
-      final petProvider = Provider.of<PetProvider>(context, listen: false);
-      
-      if (widget.pet == null) {
-        petProvider.addPet(
-          name: _nameController.text,
-          species: _selectedSpecies,
-          breed: _breedController.text,
-          birthDate: _selectedDate!,
-          weight: double.parse(_weightController.text),
-          gender: _selectedGender,
-          imageUrl: _imageUrl,
+      try {
+        final petProvider = Provider.of<PetProvider>(context, listen: false);
+        
+        // Show loading indicator
+        showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => const Center(
+            child: CircularProgressIndicator(),
+          ),
         );
-      } else {
-        petProvider.updatePet(Pet(
-          id: widget.pet!.id,
+
+        // Upload image if a new one was selected
+        String? finalImageUrl = _imageUrl;
+        if (_imageFile != null) {
+          finalImageUrl = await _uploadImage();
+        }
+
+        // Create the pet object
+        final pet = Pet(
+          id: widget.pet?.id ?? const Uuid().v4(),
           name: _nameController.text,
           species: _selectedSpecies,
           breed: _breedController.text,
           birthDate: _selectedDate!,
           weight: double.parse(_weightController.text),
           gender: _selectedGender,
-          imageUrl: _imageUrl,
-        ));
-      }
+          imageUrl: finalImageUrl,
+        );
 
-      Navigator.pop(context);
+        // Handle the pet creation/update
+        if (widget.pet == null) {
+          await petProvider.addPet(pet);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Pet added successfully')),
+          );
+        } else {
+          await petProvider.updatePet(pet);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Pet updated successfully')),
+          );
+        }
+
+        // Close loading dialog and pop the screen
+        Navigator.pop(context); // Close loading dialog
+        Navigator.pop(context); // Return to previous screen
+      } catch (e) {
+        // Close loading dialog
+        Navigator.pop(context);
+        
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -170,7 +208,7 @@ class _PetFormScreenState extends State<PetFormScreen> {
             children: [
               Center(
                 child: GestureDetector(
-                  onTap: _showImagePickerModal,
+                  onTap: _pickImage,
                   child: Hero(
                     tag: 'pet_image_${widget.pet?.id ?? "new"}',
                     child: Container(

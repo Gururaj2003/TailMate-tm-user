@@ -1,92 +1,162 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/pet.dart';
-import '../services/supabase_service.dart';
 
-class PetProvider with ChangeNotifier {
+class PetProvider extends ChangeNotifier {
+  final SupabaseClient _supabase;
   List<Pet> _pets = [];
-  final SupabaseService _supabaseService = SupabaseService();
+  bool _isLoading = false;
+  String? _error;
 
-  List<Pet> get pets => [..._pets];
+  PetProvider(this._supabase) {
+    _initialize();
+  }
 
-  Future<void> loadPets() async {
+  List<Pet> get pets => _pets;
+  bool get isLoading => _isLoading;
+  String? get error => _error;
+
+  Future<void> _initialize() async {
     try {
-      print('Loading pets from Supabase');
-      final petsData = await _supabaseService.getPets();
-      _pets = petsData.map((petData) => Pet.fromMap(petData)).toList();
-      print('Loaded ${_pets.length} pets');
+      _isLoading = true;
       notifyListeners();
+
+      print('Fetching pets from Supabase...');
+      final response = await _supabase
+          .from('pets')
+          .select()
+          .order('created_at', ascending: false);
+
+      print('Raw response from Supabase: $response');
+      
+      if (response != null) {
+        _pets = (response as List)
+            .map((data) => Pet.fromMap(data as Map<String, dynamic>))
+            .toList();
+        print('Successfully loaded ${_pets.length} pets');
+      } else {
+        print('No pets found in the database');
+        _pets = [];
+      }
     } catch (e) {
-      print('Error loading pets: $e');
-      rethrow;
+      print('Error initializing pets: $e');
+      _error = e.toString();
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        _error = 'Database error: ${e.message}';
+      }
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
-  Future<void> addPet({
-    required String name,
-    required String species,
-    String? breed,
-    DateTime? birthDate,
-    double? weight,
-    String? gender,
-    String? imageUrl,
-  }) async {
+  Future<void> addPet(Pet pet) async {
     try {
-      print('Adding new pet to Supabase');
-      final petData = await _supabaseService.addPet(
-        name: name,
-        species: species,
-        breed: breed,
-        birthDate: birthDate,
-        weight: weight,
-        gender: gender,
-        imageUrl: imageUrl,
-      );
-      final newPet = Pet.fromMap(petData);
-      _pets.add(newPet);
-      print('Added new pet: ${newPet.name}');
+      _isLoading = true;
       notifyListeners();
+
+      print('Adding new pet to Supabase...');
+      print('Pet data: ${pet.toMap()}');
+
+      final response = await _supabase
+          .from('pets')
+          .insert(pet.toMap())
+          .select()
+          .single();
+
+      print('Supabase response: $response');
+
+      if (response != null) {
+        final newPet = Pet.fromMap(response as Map<String, dynamic>);
+        _pets.add(newPet);
+        print('Successfully added pet: ${newPet.name}');
+      } else {
+        throw Exception('Failed to add pet: No response from server');
+      }
     } catch (e) {
       print('Error adding pet: $e');
-      rethrow;
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        throw Exception('Database error: ${e.message}');
+      }
+      throw Exception('Failed to add pet: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   Future<void> updatePet(Pet pet) async {
     try {
-      print('Updating pet in Supabase');
-      final petData = await _supabaseService.updatePet(
-        petId: pet.id,
-        name: pet.name,
-        species: pet.species,
-        breed: pet.breed,
-        birthDate: pet.birthDate,
-        weight: pet.weight,
-        gender: pet.gender,
-        imageUrl: pet.imageUrl,
-      );
-      final updatedPet = Pet.fromMap(petData);
-      final index = _pets.indexWhere((p) => p.id == updatedPet.id);
-      if (index >= 0) {
-        _pets[index] = updatedPet;
-        print('Updated pet: ${updatedPet.name}');
-        notifyListeners();
+      _isLoading = true;
+      notifyListeners();
+
+      print('Updating pet in Supabase...');
+      print('Pet data: ${pet.toMap()}');
+
+      final response = await _supabase
+          .from('pets')
+          .update(pet.toMap())
+          .eq('id', pet.id)
+          .select()
+          .single();
+
+      print('Supabase response: $response');
+
+      if (response != null) {
+        final updatedPet = Pet.fromMap(response as Map<String, dynamic>);
+        final index = _pets.indexWhere((p) => p.id == pet.id);
+        if (index != -1) {
+          _pets[index] = updatedPet;
+          print('Successfully updated pet: ${updatedPet.name}');
+        }
+      } else {
+        throw Exception('Failed to update pet: No response from server');
       }
     } catch (e) {
       print('Error updating pet: $e');
-      rethrow;
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        throw Exception('Database error: ${e.message}');
+      }
+      throw Exception('Failed to update pet: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
   Future<void> deletePet(String id) async {
     try {
-      print('Deleting pet from Supabase');
-      await _supabaseService.deletePet(id);
-      _pets.removeWhere((pet) => pet.id == id);
-      print('Deleted pet with ID: $id');
+      _isLoading = true;
       notifyListeners();
+
+      print('Deleting pet from Supabase...');
+      print('Pet ID: $id');
+
+      await _supabase.from('pets').delete().eq('id', id);
+      _pets.removeWhere((pet) => pet.id == id);
+      
+      print('Successfully deleted pet with ID: $id');
     } catch (e) {
       print('Error deleting pet: $e');
-      rethrow;
+      if (e is PostgrestException) {
+        print('Postgrest error details: ${e.message}');
+        print('Postgrest error code: ${e.code}');
+        print('Postgrest error details: ${e.details}');
+        throw Exception('Database error: ${e.message}');
+      }
+      throw Exception('Failed to delete pet: ${e.toString()}');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -96,5 +166,9 @@ class PetProvider with ChangeNotifier {
     } catch (e) {
       return null;
     }
+  }
+
+  Future<void> loadPets() async {
+    await _initialize();
   }
 } 

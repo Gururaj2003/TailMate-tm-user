@@ -103,7 +103,7 @@ class _HomeTabState extends State<_HomeTab> {
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    final userName = userProvider.currentUser?.name ?? 'Pet Parent';
+    final userName = userProvider.userProfile?.name ?? 'Pet Parent';
 
     return SafeArea(
       child: SingleChildScrollView(
@@ -409,12 +409,13 @@ class _ServiceCard extends StatelessWidget {
       child: InkWell(
         onTap: () {
           final serviceToUse = service ?? Service(
-            id: title.toLowerCase().replaceAll(' ', '_'),
-            title: title,
-            description: 'Service description',
+            id: 'default',
+            title: 'Custom Service',
+            description: 'Custom service description',
             price: 0.0,
-            category: title.toLowerCase().replaceAll(' ', '_'),
+            category: 'Custom',
             duration: const Duration(minutes: 30),
+            providerId: 'default_provider',
           );
           
           Navigator.pushNamed(

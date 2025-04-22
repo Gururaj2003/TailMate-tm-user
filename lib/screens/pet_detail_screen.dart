@@ -7,9 +7,13 @@ class PetDetailScreen extends StatelessWidget {
 
   const PetDetailScreen({super.key, required this.pet});
 
-  String _calculateAge(DateTime birthDate) {
+  String _calculateAge(DateTime? birthDate) {
+    if (birthDate == null) return 'Unknown';
     final now = DateTime.now();
-    final age = now.difference(birthDate).inDays ~/ 365;
+    final age = now.year - birthDate.year;
+    if (now.month < birthDate.month || (now.month == birthDate.month && now.day < birthDate.day)) {
+      return (age - 1).toString();
+    }
     return age.toString();
   }
 
@@ -18,29 +22,32 @@ class PetDetailScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(pet.name),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit),
+            onPressed: () {
+              // TODO: Implement edit functionality
+            },
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Center(
-              child: Hero(
-                tag: 'pet_${pet.name}',
-                child: CircleAvatar(
-                  backgroundColor: Theme.of(context).primaryColor.withOpacity(0.1),
-                  backgroundImage: pet.imageUrl != null ? NetworkImage(pet.imageUrl!) : null,
-                  child: pet.imageUrl == null
-                      ? Icon(
-                          Icons.pets,
-                          size: 80,
-                          color: Theme.of(context).primaryColor,
-                        )
-                      : null,
-                  radius: 80,
+            if (pet.imageUrl != null)
+              Center(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    pet.imageUrl!,
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-            ),
             const SizedBox(height: 24),
             _buildInfoCard(
               context,
@@ -49,7 +56,7 @@ class PetDetailScreen extends StatelessWidget {
                 _buildInfoRow('Species', pet.species),
                 _buildInfoRow('Breed', pet.breed),
                 _buildInfoRow('Age', '${_calculateAge(pet.birthDate)} years'),
-                _buildInfoRow('Weight', '${pet.weight} kg'),
+                _buildInfoRow('Weight', pet.weight?.toString() ?? 'Unknown'),
                 _buildInfoRow('Gender', pet.gender),
               ],
             ),
@@ -104,23 +111,23 @@ class PetDetailScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
+  Widget _buildInfoRow(String label, String? value) {
+    if (value == null || value.isEmpty) return const SizedBox.shrink();
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
-            label,
+            '$label:',
             style: const TextStyle(
-              color: Colors.grey,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w500,
-            ),
+            style: const TextStyle(fontSize: 16),
           ),
         ],
       ),

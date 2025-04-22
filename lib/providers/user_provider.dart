@@ -2,9 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:tailmate/services/supabase_service.dart';
 import 'package:flutter/material.dart';
-import 'package:tailmate/models/user_model.dart';
 
-class User {
+class UserProfile {
   final String id;
   final String name;
   final String email;
@@ -12,7 +11,7 @@ class User {
   final String? phoneNumber;
   final String? address;
 
-  User({
+  UserProfile({
     required this.id,
     required this.name,
     required this.email,
@@ -21,147 +20,196 @@ class User {
     this.address,
   });
 
-  factory User.fromSupabase(Map<String, dynamic> data) {
-    return User(
-      id: data['id'],
-      name: data['name'],
-      email: data['email'],
-      profileImage: data['profile_image'],
-      phoneNumber: data['phone_number'],
-      address: data['address'],
+  factory UserProfile.fromJson(Map<String, dynamic> json) {
+    return UserProfile(
+      id: json['id'],
+      name: json['name'],
+      email: json['email'],
+      profileImage: json['profile_image'],
+      phoneNumber: json['phone_number'],
+      address: json['address'],
     );
   }
 }
 
-class UserProvider with ChangeNotifier {
-  final SupabaseService _supabaseService = SupabaseService();
-  UserModel? _currentUser;
+class UserProvider extends ChangeNotifier {
+  final SupabaseClient _supabase;
+  User? _currentUser;
+  UserProfile? _userProfile;
   bool _isLoading = false;
   String? _error;
 
-  UserModel? get currentUser => _currentUser;
+  UserProvider(this._supabase) {
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      _supabase.auth.onAuthStateChange.listen((data) {
+        final AuthChangeEvent event = data.event;
+        final Session? session = data.session;
+        
+        if (event == AuthChangeEvent.signedIn) {
+          _currentUser = session?.user;
+          _loadUserProfile();
+        } else if (event == AuthChangeEvent.signedOut) {
+          _currentUser = null;
+          _userProfile = null;
+          notifyListeners();
+        }
+      });
+
+      // Check for existing session
+      final session = _supabase.auth.currentSession;
+      if (session != null) {
+        _currentUser = session.user;
+        await _loadUserProfile();
+      }
+    } catch (e) {
+      print('Error initializing UserProvider: $e');
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadUserProfile() async {
+    try {
+      if (_currentUser == null) return;
+      
+      final response = await _supabase
+          .from('profiles')
+          .select()
+          .eq('id', _currentUser!.id)
+          .single();
+      
+      _userProfile = UserProfile.fromJson(response);
+      notifyListeners();
+    } catch (e) {
+      print('Error loading user profile: $e');
+      _error = e.toString();
+      notifyListeners();
+    }
+  }
+
+  // Getters
+  User? get currentUser => _currentUser;
+  UserProfile? get userProfile => _userProfile;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isLoggedIn => _currentUser != null;
-  bool get isEmailVerified => _supabaseService.isEmailVerified;
+  bool get isEmailVerified => _currentUser?.emailConfirmedAt != null;
 
+  // Sign in with email and password
   Future<bool> signIn(String email, String password) async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      final response = await _supabaseService.signInWithEmailAndPassword(
-        email,
-        password,
+      final response = await _supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
       );
-
-      if (response.user != null) {
-        // Get the latest user data to check verification status
-        final refreshedUser = await _supabaseService.getCurrentUser();
-        if (refreshedUser?.emailConfirmedAt == null) {
-          _error = 'Please verify your email before signing in. Check your inbox for the verification link.';
-          notifyListeners();
-          return false;
-        }
-
-        final profile = await _supabaseService.getUserProfile();
-        if (profile != null) {
-          _currentUser = UserModel.fromJson(profile);
-          notifyListeners();
-          return true;
-        }
+      
+      if (response.user == null) {
+        throw Exception('Failed to sign in. Please check your credentials.');
       }
-      return false;
+
+      _currentUser = response.user;
+      await _loadUserProfile();
+      
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
+      _isLoading = false;
       _error = e.toString();
       notifyListeners();
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
+  // Register with email and password
   Future<bool> register(String email, String password, String name) async {
     try {
-      print('Starting registration process...');
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      print('Calling SupabaseService.registerWithEmailAndPassword...');
-      final response = await _supabaseService.registerWithEmailAndPassword(
-        email,
-        password,
-        name,
+      final response = await _supabase.auth.signUp(
+        email: email,
+        password: password,
+        data: {'name': name},
       );
 
-      print('Registration response received: ${response.user != null}');
-      if (response.user != null) {
-        print('Registration successful, user created');
-        print('Verification email has been sent to $email');
-        return true;
+      if (response.user == null) {
+        throw Exception('Failed to create account. Please try again.');
       }
-      print('Registration failed, no user created');
-      _error = 'Registration failed. Please try again.';
+
+      _currentUser = response.user;
+      await _loadUserProfile();
+      
+      _isLoading = false;
       notifyListeners();
-      return false;
+      return true;
     } catch (e) {
-      print('Error during registration: $e');
+      _isLoading = false;
       _error = e.toString();
       notifyListeners();
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
+  // Sign in with Google
   Future<bool> signInWithGoogle() async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      final success = await _supabaseService.signInWithGoogle();
-      if (success) {
-        final profile = await _supabaseService.getUserProfile();
-        if (profile != null) {
-          _currentUser = UserModel.fromJson(profile);
-          notifyListeners();
-          return true;
-        }
+      final response = await _supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: 'io.supabase.tailmate://login-callback/',
+      );
+
+      if (response == null) {
+        throw Exception('Failed to sign in with Google.');
       }
-      return false;
+
+      _currentUser = _supabase.auth.currentUser;
+      await _loadUserProfile();
+      
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
+      _isLoading = false;
       _error = e.toString();
       notifyListeners();
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
+  // Sign out
   Future<void> signOut() async {
     try {
       _isLoading = true;
-      _error = null;
       notifyListeners();
 
-      await _supabaseService.signOut();
+      await _supabase.auth.signOut();
       _currentUser = null;
+      _userProfile = null;
+      
+      _isLoading = false;
       notifyListeners();
     } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    } finally {
       _isLoading = false;
+      _error = e.toString();
       notifyListeners();
     }
   }
 
+  // Update user profile
   Future<bool> updateProfile({
     String? name,
     String? phoneNumber,
@@ -173,43 +221,58 @@ class UserProvider with ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      await _supabaseService.updateUserProfile(
-        name: name,
-        phoneNumber: phoneNumber,
-        address: address,
-        profileImage: profileImage,
-      );
-
-      final profile = await _supabaseService.getUserProfile();
-      if (profile != null) {
-        _currentUser = UserModel.fromJson(profile);
-        notifyListeners();
-        return true;
+      if (_currentUser == null) {
+        throw Exception('No user logged in');
       }
-      return false;
+
+      final updates = {
+        'updated_at': DateTime.now().toIso8601String(),
+      };
+
+      if (name != null) updates['name'] = name;
+      if (phoneNumber != null) updates['phone_number'] = phoneNumber;
+      if (address != null) updates['address'] = address;
+      if (profileImage != null) updates['profile_image'] = profileImage;
+
+      await _supabase
+          .from('profiles')
+          .update(updates)
+          .eq('id', _currentUser!.id);
+
+      await _loadUserProfile();
+      
+      _isLoading = false;
+      notifyListeners();
+      return true;
     } catch (e) {
+      _isLoading = false;
       _error = e.toString();
       notifyListeners();
       return false;
-    } finally {
-      _isLoading = false;
-      notifyListeners();
     }
   }
 
-  Future<void> resendVerificationEmail(String email) async {
+  // Resend verification email
+  Future<bool> resendVerificationEmail(String email) async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      await _supabaseService.resendVerificationEmail(email);
-    } catch (e) {
-      _error = e.toString();
-      notifyListeners();
-    } finally {
+      await _supabase.auth.resend(
+        type: OtpType.signup,
+        email: email,
+        emailRedirectTo: 'io.supabase.tailmate://login-callback/verification',
+      );
+      
       _isLoading = false;
       notifyListeners();
+      return true;
+    } catch (e) {
+      _isLoading = false;
+      _error = e.toString();
+      notifyListeners();
+      return false;
     }
   }
 

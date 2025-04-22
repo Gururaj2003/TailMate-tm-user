@@ -20,7 +20,7 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final userProvider = Provider.of<UserProvider>(context);
-    final user = userProvider.currentUser;
+    final user = userProvider.userProfile;
 
     return Scaffold(
       body: CustomScrollView(
@@ -50,7 +50,7 @@ class ProfileScreen extends StatelessWidget {
                             ? NetworkImage(user!.profileImage!)
                             : null,
                         child: user?.profileImage == null
-                            ? const Icon(Icons.person, size: 50)
+                            ? const Icon(Icons.person, size: 50, color: Colors.white)
                             : null,
                       ),
                       const SizedBox(height: 16),

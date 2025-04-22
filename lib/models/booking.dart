@@ -62,33 +62,79 @@ class Booking {
   }
 
   factory Booking.fromMap(Map<String, dynamic> map) {
-    final date = DateTime.parse(map['booking_date']);
-    final time = map['booking_time'].toString().split(':');
-    final dateTime = DateTime(
-      date.year,
-      date.month,
-      date.day,
-      int.parse(time[0]),
-      int.parse(time[1]),
-    );
+    print('Creating Booking from map: $map');
+    
+    DateTime dateTime;
+    try {
+      if (map['booking_date'] != null && map['booking_time'] != null) {
+        final date = DateTime.parse(map['booking_date']);
+        final time = map['booking_time'].toString().split(':');
+        dateTime = DateTime(
+          date.year,
+          date.month,
+          date.day,
+          int.parse(time[0]),
+          int.parse(time[1]),
+        );
+        print('Parsed dateTime from booking_date and booking_time: $dateTime');
+      } else {
+        print('Warning: booking_date or booking_time is null, using created_at');
+        dateTime = DateTime.parse(map['created_at']);
+        print('Parsed dateTime from created_at: $dateTime');
+      }
+    } catch (e) {
+      print('Error parsing date/time: $e');
+      print('Using current time as fallback');
+      dateTime = DateTime.now();
+    }
 
-    return Booking(
-      id: map['id'],
-      userId: map['user_id'],
-      providerId: map['provider_id'],
-      serviceId: map['service_id'],
-      petId: map['pet_id'],
-      dateTime: dateTime,
-      status: BookingStatus.values.firstWhere(
+    print('Status from map: ${map['status']}');
+    print('Payment status from map: ${map['payment_status']}');
+
+    BookingStatus status;
+    try {
+      status = BookingStatus.values.firstWhere(
         (e) => e.toString().split('.').last == map['status'],
         orElse: () => BookingStatus.pending,
-      ),
-      paymentStatus: PaymentStatus.values.firstWhere(
+      );
+      print('Parsed status: $status');
+    } catch (e) {
+      print('Error parsing status: $e');
+      status = BookingStatus.pending;
+    }
+
+    PaymentStatus paymentStatus;
+    try {
+      paymentStatus = PaymentStatus.values.firstWhere(
         (e) => e.toString().split('.').last == map['payment_status'],
         orElse: () => PaymentStatus.pending,
-      ),
-      amount: map['amount'],
-      notes: map['notes'],
+      );
+      print('Parsed payment status: $paymentStatus');
+    } catch (e) {
+      print('Error parsing payment status: $e');
+      paymentStatus = PaymentStatus.pending;
+    }
+
+    double amount;
+    try {
+      amount = (map['amount'] as num).toDouble();
+      print('Parsed amount: $amount');
+    } catch (e) {
+      print('Error parsing amount: $e');
+      amount = 0.0;
+    }
+
+    return Booking(
+      id: map['id']?.toString() ?? '',
+      userId: map['user_id']?.toString() ?? '',
+      providerId: map['provider_id']?.toString() ?? '',
+      serviceId: map['service_id']?.toString() ?? '',
+      petId: map['pet_id']?.toString() ?? '',
+      dateTime: dateTime,
+      status: status,
+      paymentStatus: paymentStatus,
+      amount: amount,
+      notes: map['notes']?.toString(),
       createdAt: DateTime.parse(map['created_at']),
       updatedAt: DateTime.parse(map['updated_at']),
     );

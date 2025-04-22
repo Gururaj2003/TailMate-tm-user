@@ -32,18 +32,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    print('OnboardingScreen initialized');
+  }
+
+  @override
   void dispose() {
+    print('OnboardingScreen disposed');
     _pageController.dispose();
     super.dispose();
   }
 
   void _onPageChanged(int page) {
+    print('Page changed to: $page');
     setState(() {
       _currentPage = page;
     });
   }
 
   void _navigateToLogin() {
+    print('Navigating to login screen');
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
         builder: (context) => const LoginScreen(),
@@ -53,6 +62,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    print('Building OnboardingScreen');
     return Scaffold(
       body: SafeArea(
         child: Column(
@@ -63,6 +73,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 onPageChanged: _onPageChanged,
                 itemCount: _items.length,
                 itemBuilder: (context, index) {
+                  print('Building page $index');
                   return _OnboardingPage(item: _items[index]);
                 },
               ),
@@ -98,6 +109,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       onPressed: _currentPage == _items.length - 1
                           ? _navigateToLogin
                           : () {
+                              print('Moving to next page');
                               _pageController.nextPage(
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,

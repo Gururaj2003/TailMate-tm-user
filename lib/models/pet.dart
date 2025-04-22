@@ -2,20 +2,20 @@ class Pet {
   final String id;
   final String name;
   final String species;
-  final String breed;
-  final DateTime birthDate;
-  final double weight;
-  final String gender;
+  final String? breed;
+  final DateTime? birthDate;
+  final double? weight;
+  final String? gender;
   String? imageUrl;
 
   Pet({
     required this.id,
     required this.name,
     required this.species,
-    required this.breed,
-    required this.birthDate,
-    required this.weight,
-    required this.gender,
+    this.breed,
+    this.birthDate,
+    this.weight,
+    this.gender,
     this.imageUrl,
   });
 
@@ -25,7 +25,7 @@ class Pet {
       'name': name,
       'species': species,
       'breed': breed,
-      'birth_date': birthDate.toIso8601String(),
+      'birth_date': birthDate?.toIso8601String(),
       'weight': weight,
       'gender': gender,
       'image_url': imageUrl,
@@ -33,16 +33,23 @@ class Pet {
   }
 
   factory Pet.fromMap(Map<String, dynamic> map) {
-    return Pet(
-      id: map['id'],
-      name: map['name'],
-      species: map['species'],
-      breed: map['breed'],
-      birthDate: DateTime.parse(map['birth_date']),
-      weight: map['weight'],
-      gender: map['gender'],
-      imageUrl: map['image_url'],
-    );
+    print('Creating Pet from map: $map');
+    try {
+      return Pet(
+        id: map['id'] as String,
+        name: map['name'] as String,
+        species: map['species'] as String,
+        breed: map['breed'] as String?,
+        birthDate: map['birth_date'] != null ? DateTime.parse(map['birth_date']) : null,
+        weight: map['weight'] != null ? (map['weight'] as num).toDouble() : null,
+        gender: map['gender'] as String?,
+        imageUrl: map['image_url'] as String?,
+      );
+    } catch (e) {
+      print('Error creating Pet: $e');
+      print('Map data: $map');
+      rethrow;
+    }
   }
 
   Pet copyWith({

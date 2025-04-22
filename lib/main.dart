@@ -28,36 +28,80 @@ import 'package:tailmate/screens/chat_history_screen.dart';
 import 'package:tailmate/models/service.dart';
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
   try {
-    // Validate Supabase configuration
-    SupabaseConfig.validateConfig();
+    print('Starting app initialization...');
+    WidgetsFlutterBinding.ensureInitialized();
+    print('Flutter binding initialized');
     
+    print('Starting Supabase initialization...');
+    
+    // Validate Supabase configuration
+    print('Validating Supabase configuration...');
+    SupabaseConfig.validateConfig();
+    print('Configuration validated successfully');
+    
+    print('Initializing Supabase with URL: ${SupabaseConfig.url}');
     await Supabase.initialize(
       url: SupabaseConfig.url,
       anonKey: SupabaseConfig.anonKey,
       debug: true,
     );
-    print('Supabase initialized successfully');
-  } catch (e, stackTrace) {
-    print('Error initializing Supabase: $e');
-    print('Stack trace: $stackTrace');
-    // You might want to show an error dialog or handle this differently
-  }
+    
+    final supabaseClient = Supabase.instance.client;
+    
+    // Test the connection with a simple query
+    print('Testing Supabase connection...');
+    try {
+      final response = await supabaseClient.from('services').select('count').limit(1);
+      print('Connection test response: $response');
+      
+      if (response == null) {
+        throw Exception('Null response from database');
+      }
+      
+      print('Supabase connection test successful');
+    } catch (e) {
+      print('Error testing Supabase connection: $e');
+      if (e.toString().contains('network')) {
+        print('Network error detected');
+        throw Exception('Please check your internet connection and try again');
+      } else if (e.toString().contains('auth')) {
+        print('Auth error detected');
+        throw Exception('Authentication error: ${e.toString()}');
+      } else {
+        print('Unknown error during connection test');
+        throw Exception('Failed to connect to the server: ${e.toString()}');
+      }
+    }
 
-  runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider(create: (_) => ThemeProvider()),
-        ChangeNotifierProvider(create: (_) => PetProvider()),
-        ChangeNotifierProvider(create: (_) => ServiceProvider()),
-        ChangeNotifierProvider(create: (_) => ChatProvider()),
-        ChangeNotifierProvider(create: (_) => UserProvider()),
-      ],
-      child: const TailMateApp(),
-    ),
-  );
+    print('Setting up providers...');
+    runApp(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider(create: (_) => UserProvider(supabaseClient)),
+          ChangeNotifierProvider(create: (_) => PetProvider(supabaseClient)),
+          ChangeNotifierProvider(create: (_) => ServiceProvider(supabaseClient)),
+          ChangeNotifierProvider(create: (_) => ChatProvider(supabaseClient)),
+        ],
+        child: const TailMateApp(),
+      ),
+    );
+    print('App started successfully');
+  } catch (e) {
+    print('Fatal error during app initialization: $e');
+    print('Stack trace: ${StackTrace.current}');
+    // You might want to show an error screen or handle this differently
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Text('Failed to initialize app: $e'),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class TailMateApp extends StatelessWidget {
@@ -65,6 +109,7 @@ class TailMateApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    print('Building TailMateApp...');
     final themeProvider = Provider.of<ThemeProvider>(context);
     
     return MaterialApp(
@@ -73,7 +118,7 @@ class TailMateApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: themeProvider.themeMode,
-      home: const OnboardingScreen(), // Start with onboarding screen
+      home: const OnboardingScreen(),
       routes: {
         '/chat': (context) => ChatScreen(
               provider: ModalRoute.of(context)!.settings.arguments
