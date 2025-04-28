@@ -1,105 +1,139 @@
 -- Drop existing tables if they exist (to start fresh)
-DROP TABLE IF EXISTS public.chat_history CASCADE;
-DROP TABLE IF EXISTS public.bookings CASCADE;
-DROP TABLE IF EXISTS public.services CASCADE;
-DROP TABLE IF EXISTS public.service_providers CASCADE;
-DROP TABLE IF EXISTS public.pets CASCADE;
-DROP TABLE IF EXISTS public.profiles CASCADE;
+DO $$ 
+BEGIN
+    -- Drop tables in the correct order to handle foreign key constraints
+    DROP TABLE IF EXISTS public.chat_history CASCADE;
+    DROP TABLE IF EXISTS public.bookings CASCADE;
+    DROP TABLE IF EXISTS public.services CASCADE;
+    DROP TABLE IF EXISTS public.service_providers CASCADE;
+    DROP TABLE IF EXISTS public.pets CASCADE;
+    DROP TABLE IF EXISTS public.profiles CASCADE;
+END $$;
 
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- Create profiles table
-CREATE TABLE public.profiles (
-    id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-    name TEXT,
-    email TEXT,
-    phone_number TEXT,
-    address TEXT,
-    profile_image TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- Create profiles table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'profiles') THEN
+        CREATE TABLE public.profiles (
+            id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
+            name TEXT,
+            email TEXT,
+            phone_number TEXT,
+            address TEXT,
+            profile_image TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+    END IF;
+END $$;
 
--- Create pets table
-CREATE TABLE public.pets (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    species TEXT NOT NULL,
-    breed TEXT,
-    birth_date TIMESTAMP WITH TIME ZONE,
-    weight REAL,
-    gender TEXT,
-    color TEXT,
-    medical_history TEXT,
-    special_instructions TEXT,
-    image_url TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- Create pets table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'pets') THEN
+        CREATE TABLE public.pets (
+            id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+            owner_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            species TEXT NOT NULL,
+            breed TEXT,
+            birth_date TIMESTAMP WITH TIME ZONE,
+            weight REAL,
+            gender TEXT,
+            color TEXT,
+            medical_history TEXT,
+            special_instructions TEXT,
+            image_url TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+    END IF;
+END $$;
 
--- Create service_providers table (read-only for users)
-CREATE TABLE public.service_providers (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT UNIQUE NOT NULL,
-    phone TEXT,
-    address TEXT,
-    latitude REAL,
-    longitude REAL,
-    rating REAL DEFAULT 0.0,
-    total_ratings INTEGER DEFAULT 0,
-    profile_image TEXT,
-    is_verified BOOLEAN DEFAULT false,
-    service_ids UUID[],
-    specialties TEXT[],
-    description TEXT,
-    price_multiplier REAL DEFAULT 1.0,
-    location TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- Create service_providers table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'service_providers') THEN
+        CREATE TABLE public.service_providers (
+            id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            phone TEXT,
+            address TEXT,
+            latitude REAL,
+            longitude REAL,
+            rating REAL DEFAULT 0.0,
+            total_ratings INTEGER DEFAULT 0,
+            profile_image TEXT,
+            is_verified BOOLEAN DEFAULT false,
+            service_ids UUID[],
+            specialties TEXT[],
+            description TEXT,
+            price_multiplier REAL DEFAULT 1.0,
+            location TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+    END IF;
+END $$;
 
--- Create services table (read-only for users)
-CREATE TABLE public.services (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    provider_id UUID REFERENCES public.service_providers(id) ON DELETE CASCADE,
-    name TEXT NOT NULL,
-    description TEXT,
-    price REAL NOT NULL,
-    duration INTEGER,
-    category TEXT NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- Create services table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'services') THEN
+        CREATE TABLE public.services (
+            id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+            provider_id UUID REFERENCES public.service_providers(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            description TEXT,
+            price REAL NOT NULL,
+            duration INTEGER,
+            category TEXT NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+    END IF;
+END $$;
 
--- Create bookings table
-CREATE TABLE public.bookings (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    provider_id UUID REFERENCES public.service_providers(id) ON DELETE CASCADE,
-    service_id UUID REFERENCES public.services(id) ON DELETE CASCADE,
-    pet_id UUID REFERENCES public.pets(id) ON DELETE CASCADE,
-    booking_date TEXT NOT NULL,
-    booking_time TEXT NOT NULL,
-    status TEXT DEFAULT 'pending',
-    payment_status TEXT DEFAULT 'pending',
-    amount REAL NOT NULL,
-    notes TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- Create bookings table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'bookings') THEN
+        CREATE TABLE public.bookings (
+            id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+            user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+            provider_id UUID REFERENCES public.service_providers(id) ON DELETE CASCADE,
+            service_id UUID REFERENCES public.services(id) ON DELETE CASCADE,
+            pet_id UUID REFERENCES public.pets(id) ON DELETE CASCADE,
+            booking_date TEXT NOT NULL,
+            booking_time TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            payment_status TEXT DEFAULT 'pending',
+            amount REAL NOT NULL,
+            notes TEXT,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+    END IF;
+END $$;
 
--- Create chat_history table
-CREATE TABLE public.chat_history (
-    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
-    sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-    receiver_id UUID REFERENCES public.service_providers(id) ON DELETE CASCADE,
-    message TEXT NOT NULL,
-    is_read BOOLEAN DEFAULT false,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
+-- Create chat_history table if it doesn't exist
+DO $$ 
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'chat_history') THEN
+        CREATE TABLE public.chat_history (
+            id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+            sender_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+            receiver_id UUID REFERENCES public.service_providers(id) ON DELETE CASCADE,
+            message TEXT NOT NULL,
+            is_read BOOLEAN DEFAULT false,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+        );
+    END IF;
+END $$;
 
 -- Enable Row Level Security
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
@@ -110,27 +144,30 @@ ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.chat_history ENABLE ROW LEVEL SECURITY;
 
 -- Drop existing policies if they exist
-DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
-DROP POLICY IF EXISTS "Users can view their own pets" ON public.pets;
-DROP POLICY IF EXISTS "Users can insert their own pets" ON public.pets;
-DROP POLICY IF EXISTS "Users can update their own pets" ON public.pets;
-DROP POLICY IF EXISTS "Users can delete their own pets" ON public.pets;
-DROP POLICY IF EXISTS "Allow all operations on pets" ON public.pets;
-DROP POLICY IF EXISTS "Anyone can view service providers" ON public.service_providers;
-DROP POLICY IF EXISTS "Only service providers can update their own profile" ON public.service_providers;
-DROP POLICY IF EXISTS "Service providers can insert their profile" ON public.service_providers;
-DROP POLICY IF EXISTS "Anyone can view services" ON public.services;
-DROP POLICY IF EXISTS "Service providers can manage their own services" ON public.services;
-DROP POLICY IF EXISTS "Users can view their own bookings" ON public.bookings;
-DROP POLICY IF EXISTS "Users can create bookings" ON public.bookings;
-DROP POLICY IF EXISTS "Users can update their own bookings" ON public.bookings;
-DROP POLICY IF EXISTS "Service providers can view their bookings" ON public.bookings;
-DROP POLICY IF EXISTS "Service providers can update their bookings" ON public.bookings;
-DROP POLICY IF EXISTS "Users can view their own chat history" ON public.chat_history;
-DROP POLICY IF EXISTS "Users can send messages" ON public.chat_history;
-DROP POLICY IF EXISTS "Service providers can view their chat history" ON public.chat_history;
+DO $$ 
+BEGIN
+    DROP POLICY IF EXISTS "Users can view their own profile" ON public.profiles;
+    DROP POLICY IF EXISTS "Users can update their own profile" ON public.profiles;
+    DROP POLICY IF EXISTS "Users can insert their own profile" ON public.profiles;
+    DROP POLICY IF EXISTS "Users can view their own pets" ON public.pets;
+    DROP POLICY IF EXISTS "Users can insert their own pets" ON public.pets;
+    DROP POLICY IF EXISTS "Users can update their own pets" ON public.pets;
+    DROP POLICY IF EXISTS "Users can delete their own pets" ON public.pets;
+    DROP POLICY IF EXISTS "Allow all operations on pets" ON public.pets;
+    DROP POLICY IF EXISTS "Anyone can view service providers" ON public.service_providers;
+    DROP POLICY IF EXISTS "Only service providers can update their own profile" ON public.service_providers;
+    DROP POLICY IF EXISTS "Service providers can insert their profile" ON public.service_providers;
+    DROP POLICY IF EXISTS "Anyone can view services" ON public.services;
+    DROP POLICY IF EXISTS "Service providers can manage their own services" ON public.services;
+    DROP POLICY IF EXISTS "Users can view their own bookings" ON public.bookings;
+    DROP POLICY IF EXISTS "Users can create bookings" ON public.bookings;
+    DROP POLICY IF EXISTS "Users can update their own bookings" ON public.bookings;
+    DROP POLICY IF EXISTS "Service providers can view their bookings" ON public.bookings;
+    DROP POLICY IF EXISTS "Service providers can update their bookings" ON public.bookings;
+    DROP POLICY IF EXISTS "Users can view their own chat history" ON public.chat_history;
+    DROP POLICY IF EXISTS "Users can send messages" ON public.chat_history;
+    DROP POLICY IF EXISTS "Service providers can view their chat history" ON public.chat_history;
+END $$;
 
 -- Create RLS Policies
 -- Profiles policies (User can manage their own profile)
@@ -195,19 +232,22 @@ CREATE POLICY "Users can send messages"
     ON public.chat_history FOR INSERT
     WITH CHECK (auth.uid() = sender_id);
 
--- Create indexes
-CREATE INDEX IF NOT EXISTS idx_profiles_id ON public.profiles(id);
-CREATE INDEX IF NOT EXISTS idx_pets_owner_id ON public.pets(owner_id);
-CREATE INDEX IF NOT EXISTS idx_services_provider_id ON public.services(provider_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON public.bookings(user_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_provider_id ON public.bookings(provider_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_service_id ON public.bookings(service_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_pet_id ON public.bookings(pet_id);
-CREATE INDEX IF NOT EXISTS idx_chat_history_sender_id ON public.chat_history(sender_id);
-CREATE INDEX IF NOT EXISTS idx_chat_history_receiver_id ON public.chat_history(receiver_id);
-CREATE INDEX IF NOT EXISTS idx_chat_history_created_at ON public.chat_history(created_at);
+-- Create indexes if they don't exist
+DO $$ 
+BEGIN
+    CREATE INDEX IF NOT EXISTS idx_profiles_id ON public.profiles(id);
+    CREATE INDEX IF NOT EXISTS idx_pets_owner_id ON public.pets(owner_id);
+    CREATE INDEX IF NOT EXISTS idx_services_provider_id ON public.services(provider_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_user_id ON public.bookings(user_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_provider_id ON public.bookings(provider_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_service_id ON public.bookings(service_id);
+    CREATE INDEX IF NOT EXISTS idx_bookings_pet_id ON public.bookings(pet_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_history_sender_id ON public.chat_history(sender_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_history_receiver_id ON public.chat_history(receiver_id);
+    CREATE INDEX IF NOT EXISTS idx_chat_history_created_at ON public.chat_history(created_at);
+END $$;
 
--- Create functions for updated_at
+-- Create functions for updated_at if they don't exist
 CREATE OR REPLACE FUNCTION update_updated_at_column()
 RETURNS TRIGGER AS $$
 BEGIN
@@ -216,31 +256,42 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Create triggers for updated_at
-CREATE TRIGGER update_profiles_updated_at
-    BEFORE UPDATE ON public.profiles
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+-- Create triggers for updated_at if they don't exist
+DO $$ 
+BEGIN
+    -- Drop existing triggers first
+    DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles;
+    DROP TRIGGER IF EXISTS update_pets_updated_at ON public.pets;
+    DROP TRIGGER IF EXISTS update_service_providers_updated_at ON public.service_providers;
+    DROP TRIGGER IF EXISTS update_services_updated_at ON public.services;
+    DROP TRIGGER IF EXISTS update_bookings_updated_at ON public.bookings;
 
-CREATE TRIGGER update_pets_updated_at
-    BEFORE UPDATE ON public.pets
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    -- Create new triggers
+    CREATE TRIGGER update_profiles_updated_at
+        BEFORE UPDATE ON public.profiles
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_service_providers_updated_at
-    BEFORE UPDATE ON public.service_providers
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    CREATE TRIGGER update_pets_updated_at
+        BEFORE UPDATE ON public.pets
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_services_updated_at
-    BEFORE UPDATE ON public.services
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    CREATE TRIGGER update_service_providers_updated_at
+        BEFORE UPDATE ON public.service_providers
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
 
-CREATE TRIGGER update_bookings_updated_at
-    BEFORE UPDATE ON public.bookings
-    FOR EACH ROW
-    EXECUTE FUNCTION update_updated_at_column();
+    CREATE TRIGGER update_services_updated_at
+        BEFORE UPDATE ON public.services
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+
+    CREATE TRIGGER update_bookings_updated_at
+        BEFORE UPDATE ON public.bookings
+        FOR EACH ROW
+        EXECUTE FUNCTION update_updated_at_column();
+END $$;
 
 -- Insert sample service providers and services (read-only data)
 INSERT INTO public.service_providers (id, name, email, phone, address, rating, total_ratings, is_verified, service_ids, specialties, description, price_multiplier, location)
